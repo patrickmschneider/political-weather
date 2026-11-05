@@ -120,6 +120,11 @@ function drawLegend(vmax, color, title){
   lsvg.append('g').attr('transform', `translate(0,${h})`)
       .call(d3.axisBottom(sc).tickValues(d3.range(-vmax, vmax+1, vmax > 15 ? 10 : 5)).tickSize(4).tickFormat(d => (d>0?'+':'')+d))
       .call(g => g.select('.domain').remove()).selectAll('text').attr('font-size', 9);
+  // party direction (red = Republican, blue = Democratic)
+  lsvg.append('text').attr('x', 0).attr('y', 47).attr('font-size', 10)
+      .attr('font-weight', 600).attr('fill', '#b2182b').text('← more Republican');
+  lsvg.append('text').attr('x', w).attr('y', 47).attr('text-anchor', 'end').attr('font-size', 10)
+      .attr('font-weight', 600).attr('fill', '#2166ac').text('more Democratic →');
 }
 
 function positionPlaces(){
