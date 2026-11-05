@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swingcast — 2026 Midterm Political Weather</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --panel:#ffffff; --ink:#1c1c1c; --muted:#6b6b6b;
+    --line:#d8d8d4; --accent:#2b2b2b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{padding:14px 20px 8px}
+  h1{font-size:22px;margin:0;letter-spacing:-.3px}
+  h1 .pun{color:#2166ac}
+  .sub{color:var(--muted);font-size:13px;margin-top:3px;max-width:900px}
+  .badge{display:inline-block;background:#fdecec;color:#b02020;border:1px solid #f3c9c9;
+    font-size:11px;font-weight:600;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:center;
+    padding:10px 20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:var(--panel);position:sticky;top:0;z-index:5}
+  .ctl{display:flex;flex-direction:column;gap:3px}
+  .ctl label{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  select,button{font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;
+    background:#fff;color:var(--ink);cursor:pointer}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;padding:6px 12px;background:#fff}
+  .seg button.active{background:#2b2b2b;color:#fff}
+  #legend{display:flex;flex-direction:column;gap:2px}
+  .legend-title{font-size:11px;color:var(--muted)}
+  #wrap{position:relative;width:100%;height:calc(100vh - 150px);min-height:460px}
+  svg{width:100%;height:100%;display:block;cursor:grab}
+  svg.grabbing{cursor:grabbing}
+  .state{fill:none;stroke:#333;stroke-width:.6px;vector-effect:non-scaling-stroke}
+  .tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);
+    border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 2px 8px #0002;opacity:0;transition:opacity .08s}
+  .tip b{font-size:12.5px}
+  .tip .v{font-variant-numeric:tabular-nums;font-weight:600}
+  footer{padding:8px 20px 16px;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}
+  .note{font-size:11px;color:var(--muted);margin-left:auto;max-width:340px}
+  a{color:#2166ac}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="pun">Swing</span>cast <span class="badge">PROVISIONAL</span></h1>
+  <div class="sub">A meteorological-style contour map of the 2026 U.S. House swing — isolines connect
+    counties with equal electoral swing, like isobars on a weather chart. Drag to pan, scroll to zoom,
+    hover for county detail.</div>
+</header>
+
+<div class="controls">
+  <div class="ctl">
+    <label for="baseline">Baseline</label>
+    <select id="baseline"></select>
+  </div>
+  <div class="ctl">
+    <label>View</label>
+    <div class="seg" id="mode">
+      <button data-mode="abs" class="active">Absolute swing</button>
+      <button data-mode="dev">Deviation from national</button>
+    </div>
+  </div>
+  <div class="ctl">
+    <label>&nbsp;</label>
+    <button id="reset">Reset zoom</button>
+  </div>
+  <div id="legend">
+    <span class="legend-title" id="legend-title"></span>
+    <svg id="legend-svg" width="320" height="38"></svg>
+  </div>
+  <div class="note" id="note"></div>
+</div>
+
+<div id="wrap">
+  <svg id="map"></svg>
+  <div class="tip" id="tip"></div>
+</div>
+
+<footer id="footer"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

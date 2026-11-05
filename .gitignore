@@ -1,0 +1,14 @@
+# Downloaded (untrusted) raw inputs — regenerate with scripts/fetch_data.sh
+data/raw/
+
+# Pipeline intermediates — regenerate with src/run_pipeline.py
+data/processed/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store

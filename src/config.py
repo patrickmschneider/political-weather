@@ -1,0 +1,76 @@
+"""Central configuration for the electoral swing contour pipeline.
+
+Importing this module FIRST (before numpy/scipy) also caps BLAS thread pools:
+nested parallelism (BLAS threads inside already-parallel numeric loops) causes
+catastrophic oversubscription here, turning <1s work into minutes.
+"""
+import os as _os
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    _os.environ.setdefault(_v, "1")
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA_RAW = ROOT / "data" / "raw"
+DATA_PROC = ROOT / "data" / "processed"
+OUTPUT = ROOT / "output"
+DOCS = ROOT / "docs"
+
+for _d in (DATA_PROC, OUTPUT, DOCS):
+    _d.mkdir(parents=True, exist_ok=True)
+
+# --- Coordinate reference systems -------------------------------------------
+# Source data CRS (Census cartographic boundaries): NAD83 geographic.
+CRS_GEOGRAPHIC = "EPSG:4269"
+# Working CRS for all distance / interpolation maths: CONUS Albers Equal Area.
+# Equal-area + metres => honest distances and areas across the contiguous US.
+CRS_WORKING = "EPSG:5070"
+
+# --- Geographic scope -------------------------------------------------------
+# Continental US only for the continuous surface. Alaska / Hawaii / territories
+# are geographically detached and would force the interpolator to bridge oceans,
+# so they are excluded from the CONUS surface (documented as a limitation).
+EXCLUDE_STATEFP = {"02", "15", "60", "66", "69", "72", "78"}  # AK, HI, AS, GU, MP, PR, VI
+
+# --- Interpolation grid -----------------------------------------------------
+GRID_RES_M = 25_000  # 25 km grid cell -> fine enough for smooth isolines
+
+# --- Inset regions (own equal-area projections) -----------------------------
+CRS_AK = "EPSG:3338"  # Alaska Albers Equal Area
+# Hawaii Albers Equal Area (no standard EPSG; proj4 centred on the islands).
+CRS_HI = ("+proj=aea +lat_1=19 +lat_2=22 +lat_0=20.5 +lon_0=-157 "
+          "+x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs")
+HI_GRID_RES_M = 1_500
+HI_BANDWIDTH_M = 30_000
+
+# --- Method hyperparameters (tuned/validated in cross_validate.py) ----------
+GAUSSIAN_BANDWIDTH_M = 120_000   # kernel std dev (metres)
+IDW_POWER = 2.0
+IDW_K = 32                       # nearest neighbours used per grid point
+IDW_MIN_DIST_M = 5_000           # avoid singularity at a station
+TPS_SMOOTHING = 1.0              # RBFInterpolator smoothing (regularisation)
+TPS_NEIGHBORS = 64               # local TPS neighbours (stability + speed)
+
+# --- 2026 results source (PROVISIONAL - swap this file to re-run) -----------
+# To refresh with official/updated returns, replace this single JSON file with a
+# newer copy in the same schema and re-run run_pipeline.py. Nothing else changes.
+SOURCE_2026 = DATA_RAW / "elections2026" / "county_shifts.json"
+SOURCE_2026_OVERVIEW = DATA_RAW / "elections2026" / "overview.json"
+SOURCE_2026_PROVENANCE = (
+    "mike10010100/elections-2026, site_data/county_shifts.json "
+    "(compiles NYT precinct/county returns). PROVISIONAL, pre-certification."
+)
+
+# County geometry: 2021 cartographic boundaries keep Connecticut's TRADITIONAL
+# counties, whose FIPS match the election returns (CT switched to planning
+# regions in 2022, which the 2023 boundaries use and the returns do not).
+COUNTY_SHP = DATA_RAW / "geo" / "counties2021" / "cb_2021_us_county_20m.shp"
+STATE_SHP = DATA_RAW / "geo" / "states2021" / "cb_2021_us_state_20m.shp"
+
+# --- Data-quality thresholds ------------------------------------------------
+CONTEST_MIN_PCT = 2.0   # a county-cycle is "contested" if min(Dem%, Rep%) >= this
+EEVP_MIN = 50           # drop 2026 counties with < this % of expected vote counted
+
+# --- Reproducibility --------------------------------------------------------
+RANDOM_SEED = 20261103

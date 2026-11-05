@@ -1,0 +1,26 @@
+{
+  "nx": 186,
+  "ny": 117,
+  "fetched_at": "2026-11-05T05:25:01.783181-05:00",
+  "provenance": "mike10010100/elections-2026, site_data/county_shifts.json (compiles NYT precinct/county returns). PROVISIONAL, pre-certification.",
+  "baselines": {
+    "swing_H24_H26": {
+      "label": "2024 \u2192 2026 House",
+      "national": 14.61,
+      "abs_vmax": 32.0,
+      "dev_vmax": 17.0
+    },
+    "swing_H22_H26": {
+      "label": "2022 \u2192 2026 House (midterm-to-midterm)",
+      "national": 14.96,
+      "abs_vmax": 33.0,
+      "dev_vmax": 18.0
+    },
+    "swing_P24_H26": {
+      "label": "2024 President \u2192 2026 House (cross-election)",
+      "national": 13.77,
+      "abs_vmax": 24.0,
+      "dev_vmax": 13.0
+    }
+  }
+}

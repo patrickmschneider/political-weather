@@ -1,0 +1,49 @@
+name: Build data & deploy Swingcast
+
+# Deploys the interactive map to GitHub Pages. On a schedule it also re-fetches
+# the latest provisional returns, re-runs the pipeline, and redeploys — so the
+# live site tracks the source feed as results come in.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch latest source data
+        run: bash scripts/fetch_data.sh
+
+      - name: Build pipeline + web data
+        working-directory: src
+        run: |
+          python3 prepare_data.py
+          python3 export_web.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
