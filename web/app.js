@@ -58,7 +58,7 @@ async function load(){
     d3.select(this).classed('active', true); state.mode = this.dataset.mode;
     const m = state.mode === 'margin';
     d3.select('#baseSel').property('disabled', m).style('opacity', m ? 0.4 : 1);
-    d3.select('#baseLabel').text(m ? 'Base year (n/a)' : 'Base year');
+    d3.select('#baseLabel').text(m ? 'Baseline (n/a)' : 'Baseline');
     render();
   });
   d3.select('#reset').on('click', () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity));
