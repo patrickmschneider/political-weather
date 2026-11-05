@@ -56,8 +56,12 @@ client-side. Pan/zoom and per-county hover tooltips are built in.
 **Level of detail by zoom:** each baseline ships at two kernel bandwidths — a
 coarse 75 km surface shown when zoomed out and a finer 40 km surface that loads
 on demand and is revealed as you zoom in (the status line shows which is active).
-Static maps also default to the 75 km kernel on a 15 km grid. Alaska is shown as
-"result pending" (see limitations); Hawaii appears on the static maps.
+Static maps also default to the 75 km kernel on a 15 km grid.
+
+**City labels:** state capitals (solid dots) and major cities (hollow dots) can
+be toggled on/off; labels are placed greedily by population so crowded regions
+keep the larger cities and more appear as you zoom. Alaska is shown as "result
+pending" (see limitations); Hawaii appears on the static maps.
 
 ### Deploy / auto-update
 

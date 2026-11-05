@@ -94,13 +94,16 @@ def main():
                 for _, r in stations.iterrows()]
     json.dump(counties, open(WEB_DATA / "counties.json", "w"))
 
-    # State capitals (+ DC), projected to the working CRS (metres).
+    # Capitals (+ DC) and major cities, projected to the working CRS (metres).
     tr = Transformer.from_crs(C.CRS_GEOGRAPHIC, C.CRS_WORKING, always_xy=True)
-    caps = []
-    for name, st, lat, lon, pop in CAP.CAPITALS:
-        x, y = tr.transform(lon, lat)
-        caps.append({"n": name, "s": st, "x": round(x), "y": round(y), "p": pop})
-    json.dump(caps, open(WEB_DATA / "capitals.json", "w"))
+    def project(rows):
+        out = []
+        for name, st, lat, lon, pop in rows:
+            x, y = tr.transform(lon, lat)
+            out.append({"n": name, "s": st, "x": round(x), "y": round(y), "p": pop})
+        return out
+    json.dump(project(CAP.CAPITALS), open(WEB_DATA / "capitals.json", "w"))
+    json.dump(project(CAP.MAJORS), open(WEB_DATA / "majors.json", "w"))
 
     json.dump(meta, open(WEB_DATA / "meta.json", "w"), indent=1)
 
