@@ -6,13 +6,14 @@
 'use strict';
 
 const DATA = 'data/';
-const state = { meta:null, grids:{}, states:null, land:null, counties:null,
-                baseline:null, mode:'abs', lod:null, quad:null, loading:{} };
+const state = { meta:null, grids:{}, states:null, land:null, counties:null, capitals:null,
+                baseline:null, mode:'abs', lod:null, quad:null, loading:{}, showCaps:true };
 
 const svg = d3.select('#map');
 const gZoom = svg.append('g');
 const gContour = gZoom.append('g');
 const gStates = gZoom.append('g');
+const gCaps = svg.append('g').style('pointer-events', 'none');   // overlay, constant screen size
 const tip = d3.select('#tip');
 
 let MINX=0, MINY=0, MAXX=0, MAXY=0, S=1, OFFX=0, OFFY=0;
@@ -43,9 +44,10 @@ async function load(){
   const meta = await d3.json(DATA + 'meta.json');
   state.meta = meta;
   [MINX, MINY, MAXX, MAXY] = meta.bounds;
-  const [states, land, counties] = await Promise.all([
-    d3.json(DATA + 'states.json'), d3.json(DATA + 'land.json'), d3.json(DATA + 'counties.json')]);
-  state.states = states; state.land = land; state.counties = counties;
+  const [states, land, counties, capitals] = await Promise.all([
+    d3.json(DATA + 'states.json'), d3.json(DATA + 'land.json'),
+    d3.json(DATA + 'counties.json'), d3.json(DATA + 'capitals.json')]);
+  state.states = states; state.land = land; state.counties = counties; state.capitals = capitals;
   const cols = Object.keys(meta.baselines);
   state.baseline = cols[0];
   state.lod = meta.lods[0];
@@ -65,6 +67,7 @@ async function load(){
   state.quad = d3.quadtree().x(d => d.x).y(d => d.y).addAll(counties);
 
   d3.select('#reset').on('click', () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity));
+  d3.select('#capToggle').on('change', function(){ state.showCaps = this.checked; positionCapitals(); });
   d3.select('#footer').html(
     `Source: <a href="https://github.com/mike10010100/elections-2026" target="_blank" rel="noopener">mike10010100/elections-2026</a>
      (compiles NYT returns) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
@@ -117,10 +120,31 @@ function drawLegend(vmax, color, title){
       .call(g => g.select('.domain').remove()).selectAll('text').attr('font-size', 9);
 }
 
+function positionCapitals(){
+  if (!state.capitals || !MPATH){ gCaps.selectAll('*').remove(); return; }
+  const t = d3.zoomTransform(svg.node());
+  const W = svg.node().clientWidth, H = svg.node().clientHeight;
+  const pts = state.showCaps ? state.capitals
+      .map(c => ({ ...c, X: t.applyX(sx(c.x)), Y: t.applyY(sy(c.y)) }))
+      .filter(c => c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10) : [];
+  gCaps.selectAll('circle').data(pts, d => d.n).join('circle')
+      .attr('class', 'cap-dot').attr('cx', d => d.X).attr('cy', d => d.Y).attr('r', 2.6);
+  // greedy label placement by population; crowded areas keep the larger cities
+  const placed = [], show = [];
+  for (const c of [...pts].sort((a, b) => b.p - a.p)){
+    const w = c.n.length*6 + 8, box = [c.X+5, c.Y-6, c.X+5+w, c.Y+6];
+    if (placed.some(p => !(box[2]<p[0] || box[0]>p[2] || box[3]<p[1] || box[1]>p[3]))) continue;
+    placed.push(box); show.push(c);
+  }
+  gCaps.selectAll('text').data(show, d => d.n).join('text')
+      .attr('class', 'cap-label').attr('x', d => d.X+5).attr('y', d => d.Y+3).text(d => d.n);
+}
+
 const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', async e => {
   gZoom.attr('transform', e.transform);
   gContour.selectAll('path').attr('stroke-width', 0.3/e.transform.k);
   gStates.selectAll('path').attr('stroke-width', 0.6/e.transform.k);
+  positionCapitals();
   const want = pickLOD(e.transform.k);
   if (want !== state.lod){
     state.lod = want;
@@ -155,6 +179,7 @@ function resize(){
   svg.select('#landclip path').attr('d', MPATH(state.land));
   svg.call(zoom.transform, d3.zoomIdentity);
   render();
+  positionCapitals();
 }
 
 load().catch(err => { console.error(err); document.getElementById('footer').textContent = 'Failed to load data: ' + err; });

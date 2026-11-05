@@ -18,9 +18,32 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib import patheffects as pe
+from pyproj import Transformer
 
 import interpolate as I
 import insets as INS
+import capitals as CAP
+
+
+def draw_capitals(ax):
+    """Capital dots (all) + labels placed greedily by population so crowded
+    regions keep only the larger cities."""
+    tr = Transformer.from_crs(C.CRS_GEOGRAPHIC, C.CRS_WORKING, always_xy=True)
+    caps = [(n, *tr.transform(lon, lat), pop) for n, s, lat, lon, pop in CAP.CAPITALS]
+    ax.scatter([c[1] for c in caps], [c[2] for c in caps], s=7,
+               facecolor="#111", edgecolor="white", linewidths=0.5, zorder=20)
+    halo = [pe.withStroke(linewidth=2.2, foreground="white")]
+    placed = []
+    for n, x, y, pop in sorted(caps, key=lambda c: -c[3]):
+        dx, dy = ax.transData.transform((x, y))
+        w = len(n) * 7 * 0.55 + 6
+        box = (dx + 4, dy - 5, dx + 4 + w, dy + 5)
+        if any(not (box[2] < p[0] or box[0] > p[2] or box[3] < p[1] or box[1] > p[3]) for p in placed):
+            continue
+        placed.append(box)
+        ax.annotate(n, (x, y), xytext=(4, 0), textcoords="offset points", fontsize=7,
+                    va="center", ha="left", color="#1a1a1a", zorder=21, path_effects=halo)
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10,
                      "axes.edgecolor": "#444444", "figure.facecolor": "white"})
@@ -95,6 +118,7 @@ def render_hero(stations, land, states, value_col, method, out_png, title,
     if show_dots:
         s = stations.dropna(subset=[value_col])
         ax.scatter(s["x"], s["y"], s=1.0, c="#00000018", linewidths=0)
+    draw_capitals(ax)
     if stations_all is not None:
         ax_ak = ax.inset_axes([0.005, 0.01, 0.17, 0.20])
         _draw_ak_inset(ax_ak, INS.ak_geometry())

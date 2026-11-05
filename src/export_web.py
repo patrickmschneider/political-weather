@@ -15,8 +15,10 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import shapely
+from pyproj import Transformer
 
 import interpolate as I
+import capitals as CAP
 
 WEB_DATA = C.ROOT / "web" / "data"
 WEB_DATA.mkdir(parents=True, exist_ok=True)
@@ -91,6 +93,15 @@ def main():
                  "v": {c: (None if pd.isna(r[c]) else round(float(r[c]), 1)) for c in BASELINES}}
                 for _, r in stations.iterrows()]
     json.dump(counties, open(WEB_DATA / "counties.json", "w"))
+
+    # State capitals (+ DC), projected to the working CRS (metres).
+    tr = Transformer.from_crs(C.CRS_GEOGRAPHIC, C.CRS_WORKING, always_xy=True)
+    caps = []
+    for name, st, lat, lon, pop in CAP.CAPITALS:
+        x, y = tr.transform(lon, lat)
+        caps.append({"n": name, "s": st, "x": round(x), "y": round(y), "p": pop})
+    json.dump(caps, open(WEB_DATA / "capitals.json", "w"))
+
     json.dump(meta, open(WEB_DATA / "meta.json", "w"), indent=1)
 
     sz = sum(f.stat().st_size for f in WEB_DATA.glob("*.json")) / 1e6

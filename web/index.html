@@ -36,6 +36,10 @@
   svg{width:100%;height:100%;display:block;cursor:grab}
   svg.grabbing{cursor:grabbing}
   .state{fill:none;stroke:#333;stroke-width:.6px;vector-effect:non-scaling-stroke}
+  .cap-dot{fill:#111;stroke:#fff;stroke-width:1}
+  .cap-label{font-size:11px;fill:#1a1a1a;paint-order:stroke;stroke:#fff;stroke-width:3px;
+    stroke-linejoin:round;pointer-events:none}
+  .chk{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none}
   .tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);
     border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 2px 8px #0002;opacity:0;transition:opacity .08s}
   .tip b{font-size:12.5px}
@@ -68,6 +72,10 @@
   <div class="ctl">
     <label>&nbsp;</label>
     <button id="reset">Reset zoom</button>
+  </div>
+  <div class="ctl">
+    <label>Labels</label>
+    <label class="chk"><input type="checkbox" id="capToggle" checked> Capitals</label>
   </div>
   <div id="legend">
     <span class="legend-title" id="legend-title"></span>
