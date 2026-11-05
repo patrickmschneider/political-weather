@@ -58,12 +58,28 @@ def load_house(src) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def load_pres(path, year) -> pd.DataFrame:
-    df = pd.read_csv(path, dtype={"county_fips": str})
-    df["fips"] = df["county_fips"].str.zfill(5)
-    df[f"pmargin_{year}"] = _tp_margin(df["votes_dem"], df["votes_gop"])
-    df[f"pvotes_{year}"] = df["votes_dem"] + df["votes_gop"]
-    return df[["fips", f"pmargin_{year}", f"pvotes_{year}"]]
+def _pres_cols(df, fips_col, dem_col, gop_col, year) -> pd.DataFrame:
+    fips = (df[fips_col].astype(str).str.split(".").str[0].str.zfill(5))
+    out = pd.DataFrame({"fips": fips})
+    out[f"pmargin_{year}"] = _tp_margin(df[dem_col], df[gop_col])
+    out[f"pvotes_{year}"] = df[dem_col].astype(float) + df[gop_col].astype(float)
+    return out
+
+
+def load_pres_year(path, year, fips_col="county_fips") -> pd.DataFrame:
+    """Per-year presidential file (2016 uses combined_fips, 2020/24 county_fips)."""
+    df = pd.read_csv(path, dtype={fips_col: str})
+    return _pres_cols(df, fips_col, "votes_dem", "votes_gop", year)
+
+
+def load_pres_combined(path, years) -> pd.DataFrame:
+    """Wide 2008-2016 file: dem_YYYY / gop_YYYY columns keyed by fips_code."""
+    df = pd.read_csv(path, dtype={"fips_code": str})
+    merged = None
+    for y in years:
+        part = _pres_cols(df, "fips_code", f"dem_{y}", f"gop_{y}", y)
+        merged = part if merged is None else merged.merge(part, on="fips", how="outer")
+    return merged
 
 
 def national_swing(df, m_from, m_to, w_to, valid):
@@ -87,9 +103,15 @@ def main():
     log["provenance"]["geometry"] = "US Census CB 2021 county/state 1:20m (traditional CT counties)"
 
     house = load_house(C.SOURCE_2026)
-    p24 = load_pres(C.DATA_RAW / "2024_county_pres.csv", 2024)
-    p20 = load_pres(C.DATA_RAW / "2020_county_pres.csv", 2020)
-    df = house.merge(p24, on="fips", how="left").merge(p20, on="fips", how="left")
+    pres = [
+        load_pres_year(C.DATA_RAW / "2024_county_pres.csv", 2024),
+        load_pres_year(C.DATA_RAW / "2020_county_pres.csv", 2020),
+        load_pres_year(C.DATA_RAW / "2016_county_pres.csv", 2016, fips_col="combined_fips"),
+        load_pres_combined(C.DATA_RAW / "pres_08_16.csv", [2008, 2012]),
+    ]
+    df = house
+    for p in pres:
+        df = df.merge(p, on="fips", how="left")
 
     # --- Geometry for ALL counties (geographic rep points) ------------------
     # One all-states table drives both the CONUS surface and the AK/HI insets;

@@ -82,7 +82,7 @@ EEVP_MIN = 50           # drop 2026 counties with < this % of expected vote coun
 # --- Year surfaces offered in the web app's base/comparison pickers ---------
 # Each becomes one smoothed margin surface; the app differences any two.
 OFFER_HOUSE_YEARS = [2014, 2016, 2018, 2020, 2022, 2024, 2026]
-OFFER_PRES_YEARS = [2020, 2024]
+OFFER_PRES_YEARS = [2008, 2012, 2016, 2020, 2024]
 
 # --- Reproducibility --------------------------------------------------------
 RANDOM_SEED = 20261103

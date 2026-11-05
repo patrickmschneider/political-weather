@@ -12,7 +12,7 @@ chart.
 > [Data & provenance](#data--provenance) and [Limitations](#limitations).
 
 **Interactive map:** `https://patrickmschneider.github.io/political-weather/`. Pick any
-**base** and **comparison** year (House 2014–2026, President 2020/2024), toggle
+**base** and **comparison** year (House 2014–2026, President 2008–2024), toggle
 absolute vs. deviation-from-national, zoom/pan (finer detail revealed on zoom),
 hover any county, and show state capitals / major cities. Rebuilt and redeployed
 on a schedule as results update.

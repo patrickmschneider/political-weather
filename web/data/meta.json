@@ -5,7 +5,7 @@
   2258154.440899481,
   3165721.6501298035
  ],
- "fetched_at": "2026-11-05T05:25:01.783181-05:00",
+ "fetched_at": "2026-11-05T07:45:01.257769-05:00",
  "provenance": "mike10010100/elections-2026, site_data/county_shifts.json (compiles NYT precinct/county returns). PROVISIONAL, pre-certification.",
  "lods": [
   {
@@ -66,6 +66,21 @@
    "label": "2026 House",
    "type": "house",
    "national": 11.16
+  },
+  "P2008": {
+   "label": "2008 President",
+   "type": "pres",
+   "national": 7.34
+  },
+  "P2012": {
+   "label": "2012 President",
+   "type": "pres",
+   "national": 2.68
+  },
+  "P2016": {
+   "label": "2016 President",
+   "type": "pres",
+   "national": 0.99
   },
   "P2020": {
    "label": "2020 President",

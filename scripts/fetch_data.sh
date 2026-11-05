@@ -7,10 +7,12 @@ RAW="data/raw"
 GEO="$RAW/geo"
 mkdir -p "$RAW" "$GEO" "$RAW/elections2026"
 
-echo "[1/3] County presidential returns (2020, 2024) — tonmcg"
+echo "[1/3] County presidential returns (2008-2024) — tonmcg"
 base="https://raw.githubusercontent.com/tonmcg/US_County_Level_Election_Results_08-24/master"
 curl -fsSL -o "$RAW/2024_county_pres.csv" "$base/2024_US_County_Level_Presidential_Results.csv"
 curl -fsSL -o "$RAW/2020_county_pres.csv" "$base/2020_US_County_Level_Presidential_Results.csv"
+curl -fsSL -o "$RAW/2016_county_pres.csv" "$base/2016_US_County_Level_Presidential_Results.csv"
+curl -fsSL -o "$RAW/pres_08_16.csv"       "$base/US_County_Level_Presidential_Results_08-16.csv"
 
 echo "[2/3] Census cartographic boundaries 2021 (county + state, 1:20m)"
 cb="https://www2.census.gov/geo/tiger/GENZ2021/shp"
