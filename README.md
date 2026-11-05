@@ -11,7 +11,7 @@ chart.
 > unofficial, compiled two days after the election, and still changing. See
 > [Data & provenance](#data--provenance) and [Limitations](#limitations).
 
-**Interactive map:** `https://patrickmschneider.github.io/swingcast/` (live once
+**Interactive map:** `https://patrickmschneider.github.io/political-weather/` (live once
 GitHub Pages is enabled). Toggle baseline and absolute vs. deviation-from-national
 view, zoom/pan, hover any county. Rebuilt and redeployed on a schedule as results
 update.
