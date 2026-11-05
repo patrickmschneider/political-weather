@@ -11,10 +11,11 @@ chart.
 > unofficial, compiled two days after the election, and still changing. See
 > [Data & provenance](#data--provenance) and [Limitations](#limitations).
 
-**Interactive map:** `https://patrickmschneider.github.io/political-weather/` (live once
-GitHub Pages is enabled). Toggle baseline and absolute vs. deviation-from-national
-view, zoom/pan, hover any county. Rebuilt and redeployed on a schedule as results
-update.
+**Interactive map:** `https://patrickmschneider.github.io/political-weather/`. Pick any
+**base** and **comparison** year (House 2014–2026, President 2020/2024), toggle
+absolute vs. deviation-from-national, zoom/pan (finer detail revealed on zoom),
+hover any county, and show state capitals / major cities. Rebuilt and redeployed
+on a schedule as results update.
 
 ## The maps
 
@@ -47,11 +48,17 @@ cd web && python3 -m http.server 8777   # then open http://localhost:8777
 
 ## Interactive web app (`web/`)
 
-A dependency-light static site (D3 + `d3-contour`, no build step). The smoothed
-surface is exported as grids plus base layers in projected (EPSG:5070) metres;
-the browser computes the contour bands, so **baseline** and
-**absolute ↔ deviation** toggles are instant and no interpolation runs
-client-side. Pan/zoom and per-county hover tooltips are built in.
+A dependency-light static site (D3 + `d3-contour`, no build step). One
+Gaussian-smoothed **margin surface per year** is exported (projected EPSG:5070
+metres) and the browser differences any two the viewer picks — swing =
+margin(comparison) − margin(base) — so the **base/comparison year** and
+**absolute ↔ deviation** controls are instant and no interpolation runs
+client-side. The colour scale is set from the smoothed surface over land only;
+per-county margins drive the tooltips. Pan/zoom and hover are built in.
+
+(The app uses "difference of smoothed margins" to allow arbitrary year pairs; the
+static maps use the equivalent "smoothed difference" of a single pair. The two
+agree closely.)
 
 **Level of detail by zoom:** each baseline ships at two kernel bandwidths — a
 coarse 75 km surface shown when zoomed out and a finer 40 km surface that loads

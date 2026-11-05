@@ -79,5 +79,10 @@ STATE_SHP = DATA_RAW / "geo" / "states2021" / "cb_2021_us_state_20m.shp"
 CONTEST_MIN_PCT = 2.0   # a county-cycle is "contested" if min(Dem%, Rep%) >= this
 EEVP_MIN = 50           # drop 2026 counties with < this % of expected vote counted
 
+# --- Year surfaces offered in the web app's base/comparison pickers ---------
+# Each becomes one smoothed margin surface; the app differences any two.
+OFFER_HOUSE_YEARS = [2014, 2016, 2018, 2020, 2022, 2024, 2026]
+OFFER_PRES_YEARS = [2020, 2024]
+
 # --- Reproducibility --------------------------------------------------------
 RANDOM_SEED = 20261103

@@ -31,24 +31,55 @@
    "ny": 265
   }
  ],
- "baselines": {
-  "swing_H24_H26": {
-   "label": "2024 \u2192 2026 House",
-   "national": 14.61,
-   "abs_vmax": 34.0,
-   "dev_vmax": 20.0
+ "years": {
+  "H2014": {
+   "label": "2014 House",
+   "type": "house",
+   "national": -4.07
   },
-  "swing_H22_H26": {
-   "label": "2022 \u2192 2026 House (midterm-to-midterm)",
-   "national": 14.96,
-   "abs_vmax": 35.0,
-   "dev_vmax": 20.0
+  "H2016": {
+   "label": "2016 House",
+   "type": "house",
+   "national": 0.73
   },
-  "swing_P24_H26": {
-   "label": "2024 President \u2192 2026 House (cross-election)",
-   "national": 13.77,
-   "abs_vmax": 26.0,
-   "dev_vmax": 16.0
+  "H2018": {
+   "label": "2018 House",
+   "type": "house",
+   "national": 7.74
+  },
+  "H2020": {
+   "label": "2020 House",
+   "type": "house",
+   "national": 3.62
+  },
+  "H2022": {
+   "label": "2022 House",
+   "type": "house",
+   "national": -0.77
+  },
+  "H2024": {
+   "label": "2024 House",
+   "type": "house",
+   "national": -1.44
+  },
+  "H2026": {
+   "label": "2026 House",
+   "type": "house",
+   "national": 11.16
+  },
+  "P2020": {
+   "label": "2020 President",
+   "type": "pres",
+   "national": 4.48
+  },
+  "P2024": {
+   "label": "2024 President",
+   "type": "pres",
+   "national": -1.91
   }
+ },
+ "default": {
+  "base": "H2024",
+  "comparison": "H2026"
  }
 }

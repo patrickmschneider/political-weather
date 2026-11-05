@@ -43,8 +43,10 @@ def _as_arrays(stations):
 
 
 def gaussian_surface(stations, value_col, GX, GY, inside,
-                     bandwidth=C.GAUSSIAN_BANDWIDTH_M):
-    x, y, w = _as_arrays(stations)
+                     bandwidth=C.GAUSSIAN_BANDWIDTH_M, weight_col="weight"):
+    x = stations["x"].to_numpy(float)
+    y = stations["y"].to_numpy(float)
+    w = stations[weight_col].to_numpy(float)
     v = stations[value_col].to_numpy(float)
     ok = np.isfinite(v) & np.isfinite(w)
     x, y, w, v = x[ok], y[ok], w[ok], v[ok]

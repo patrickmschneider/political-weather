@@ -1,12 +1,14 @@
 """
-Export smoothed swing surfaces + base layers for the interactive web app.
+Export per-YEAR smoothed margin surfaces + base layers for the interactive app.
 
-Everything is in projected METRES (EPSG:5070 CONUS Albers). The app applies one
-linear metres->screen transform plus d3.zoom, and builds contour bands with
-d3-contour. Each baseline ships at two levels of detail (a coarse 75 km-kernel
-surface and a finer 40 km one) so the browser can reveal finer structure as the
-viewer zooms in. Only ABSOLUTE swing grids are shipped; the app derives the
-deviation-from-national view by subtracting the national swing in-browser.
+Each offered election year (House 2014-2026, President 2020/2024) becomes one
+Gaussian-smoothed Democratic two-party margin grid (coarse + fine LOD), smoothed
+over that year's CONTESTED counties and weighted by that year's two-party votes.
+The browser differences any two years it is shown -> swing = margin(comparison) -
+margin(base) - so the viewer can pick both the base and the comparison year.
+County-level per-year margins drive the exact colour scale and tooltips.
+
+Coordinates are projected METRES (EPSG:5070).
 """
 from __future__ import annotations
 import config as C
@@ -23,14 +25,19 @@ import capitals as CAP
 WEB_DATA = C.ROOT / "web" / "data"
 WEB_DATA.mkdir(parents=True, exist_ok=True)
 
-BASELINES = {
-    "swing_H24_H26": "2024 → 2026 House",
-    "swing_H22_H26": "2022 → 2026 House (midterm-to-midterm)",
-    "swing_P24_H26": "2024 President → 2026 House (cross-election)",
-}
+
+def year_specs():
+    out = []
+    for yr in C.OFFER_HOUSE_YEARS:
+        out.append((f"H{yr}", f"{yr} House", "house",
+                    f"hmargin_{yr}", f"hvotes_{yr}", f"hcontested_{yr}"))
+    for yr in C.OFFER_PRES_YEARS:
+        out.append((f"P{yr}", f"{yr} President", "pres",
+                    f"pmargin_{yr}", f"pvotes_{yr}", None))
+    return out
 
 
-def _round_coords(geom, nd=-2):   # round metres to nearest 100 m to shrink files
+def _round_coords(geom, nd=-2):
     return shapely.transform(geom, lambda a: np.round(a, nd))
 
 
@@ -48,68 +55,87 @@ def _grid(land, res):
     xs = np.arange(minx, maxx + res, res)
     ys = np.arange(miny, maxy + res, res)
     GX, GY = np.meshgrid(xs, ys)
-    return xs, ys, GX, GY, (minx, miny)
+    return GX, GY, (minx, miny)
 
 
 def main():
     stations = pd.read_csv(C.DATA_PROC / "stations.csv", dtype={"fips": str})
     land = gpd.read_file(C.DATA_PROC / "conus_land.gpkg")
     states = gpd.read_file(C.DATA_PROC / "conus_states.gpkg")
+    minx, miny, maxx, maxy = land.geometry.iloc[0].bounds
+    specs = year_specs()
+
+    meta = {"bounds": [minx, miny, maxx, maxy], "fetched_at": None, "provenance": None,
+            "lods": [], "years": {}, "default": {"base": "H2024", "comparison": "H2026"}}
     log = json.load(open(C.DATA_PROC / "data_quality_log.json"))
-    land_geom = land.geometry.iloc[0]
-    minx, miny, maxx, maxy = land_geom.bounds
+    meta["fetched_at"] = log["provenance"]["fetched_at"]
+    meta["provenance"] = log["provenance"]["source_2026"]
 
-    meta = {"bounds": [minx, miny, maxx, maxy], "fetched_at": log["provenance"]["fetched_at"],
-            "provenance": log["provenance"]["source_2026"], "lods": [], "baselines": {}}
+    # subset of contested+present stations per year, and national margin
+    subs = {}
+    for key, label, typ, mcol, wcol, ccol in specs:
+        mask = stations[mcol].notna() & stations[wcol].notna()
+        if ccol:
+            mask &= stations[ccol].astype(bool)
+        sub = stations[mask].copy()
+        subs[key] = (sub, mcol, wcol)
+        natl = float(np.average(sub[mcol], weights=sub[wcol]))
+        meta["years"][key] = {"label": label, "type": typ, "national": round(natl, 2)}
 
-    # colour-scale domains from the coarse surface (inside land only)
-    name0, bw0, res0, _ = C.WEB_LODS[0]
-    xs, ys, GX, GY, _ = _grid(land, res0)
-    inside = shapely.contains_xy(land_geom, GX.ravel(), GY.ravel()).reshape(GX.shape)
-    for col, label in BASELINES.items():
-        Zin = I.gaussian_surface(stations, col, GX, GY, inside, bandwidth=bw0)
-        v = Zin[np.isfinite(Zin)]
-        natl = log["national"][col]["national_swing_pts"]
-        meta["baselines"][col] = {
-            "label": label, "national": round(natl, 2),
-            "abs_vmax": float(np.ceil(np.percentile(np.abs(v), 99))),
-            "dev_vmax": float(np.ceil(np.percentile(np.abs(v - natl), 99)))}
-
-    # per-LOD grids (full rectangle, evaluated everywhere; app clips to land)
+    # per-LOD, per-year margin grids (full rectangle; app clips to land)
     for name, bw, res, zmin in C.WEB_LODS:
-        xs, ys, GX, GY, (x0, y0) = _grid(land, res)
-        nx, ny = len(xs), len(ys)
+        GX, GY, (x0, y0) = _grid(land, res)
+        nx, ny = GX.shape[1], GX.shape[0]
         meta["lods"].append({"name": name, "bw_km": bw / 1000, "zmin": zmin,
                              "x0": x0, "y0": y0, "dx": res, "dy": res, "nx": nx, "ny": ny})
-        for col in BASELINES:
-            Z = I.gaussian_surface(stations, col, GX, GY, np.ones(GX.shape, bool), bandwidth=bw)
+        allin = np.ones(GX.shape, bool)
+        for key, (sub, mcol, wcol) in subs.items():
+            Z = I.gaussian_surface(sub, mcol, GX, GY, allin, bandwidth=bw, weight_col=wcol)
             json.dump({"z": np.round(Z, 2).ravel(order="C").tolist()},
-                      open(WEB_DATA / f"grid_{col}_{name}.json", "w"))
+                      open(WEB_DATA / f"margin_{key}_{name}.json", "w"))
 
+    # land mask for the coarse grid: lets the app set the colour-scale domain
+    # over land only (offshore extrapolated cells would otherwise inflate it).
+    land_geom = land.geometry.iloc[0]
+    name0, bw0, res0, _ = C.WEB_LODS[0]
+    GX, GY, _ = _grid(land, res0)
+    inside = shapely.contains_xy(land_geom, GX.ravel(), GY.ravel())
+    json.dump({"nx": GX.shape[1], "ny": GX.shape[0],
+               "mask": "".join("1" if b else "0" for b in inside)},
+              open(WEB_DATA / "landmask_coarse.json", "w"))
+
+    # base layers
     json.dump(_fc(states, ["STUSPS"]), open(WEB_DATA / "states.json", "w"))
     json.dump(_fc(land), open(WEB_DATA / "land.json", "w"))
 
-    counties = [{"x": round(r["x"]), "y": round(r["y"]), "n": r["name"], "s": r["state"],
-                 "v": {c: (None if pd.isna(r[c]) else round(float(r[c]), 1)) for c in BASELINES}}
-                for _, r in stations.iterrows()]
-    json.dump(counties, open(WEB_DATA / "counties.json", "w"))
+    # county per-year margins (null where uncontested/missing) for tooltips + scale
+    cj = []
+    for _, r in stations.iterrows():
+        m = {}
+        for key, label, typ, mcol, wcol, ccol in specs:
+            ok = pd.notna(r[mcol]) and (not ccol or bool(r[ccol]))
+            m[key] = None if not ok else round(float(r[mcol]), 1)
+        cj.append({"x": round(r["x"]), "y": round(r["y"]), "n": r["name"], "s": r["state"], "m": m})
+    json.dump(cj, open(WEB_DATA / "counties.json", "w"))
 
-    # Capitals (+ DC) and major cities, projected to the working CRS (metres).
+    # capitals + majors
     tr = Transformer.from_crs(C.CRS_GEOGRAPHIC, C.CRS_WORKING, always_xy=True)
     def project(rows):
-        out = []
-        for name, st, lat, lon, pop in rows:
-            x, y = tr.transform(lon, lat)
-            out.append({"n": name, "s": st, "x": round(x), "y": round(y), "p": pop})
-        return out
+        return [{"n": n, "s": s, "x": round(tr.transform(lon, lat)[0]),
+                 "y": round(tr.transform(lon, lat)[1]), "p": pop}
+                for n, s, lat, lon, pop in rows]
     json.dump(project(CAP.CAPITALS), open(WEB_DATA / "capitals.json", "w"))
     json.dump(project(CAP.MAJORS), open(WEB_DATA / "majors.json", "w"))
 
     json.dump(meta, open(WEB_DATA / "meta.json", "w"), indent=1)
+    # drop stale single-baseline grids from the previous model
+    for f in WEB_DATA.glob("grid_swing_*.json"):
+        f.unlink()
 
     sz = sum(f.stat().st_size for f in WEB_DATA.glob("*.json")) / 1e6
-    print(f"Exported web data ({sz:.2f} MB). LODs: " +
-          ", ".join(f"{l['name']} {l['bw_km']:.0f}km {l['nx']}x{l['ny']}" for l in meta["lods"]))
+    print(f"Exported web data ({sz:.2f} MB). Years: " + ", ".join(meta["years"].keys()))
+    for k, v in meta["years"].items():
+        print(f"  {k}: {v['label']:16s} national margin {v['national']:+.1f}")
 
 
 if __name__ == "__main__":

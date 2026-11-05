@@ -38,10 +38,11 @@ def load_house(src) -> pd.DataFrame:
     two-party margins, two-party votes and contested/completeness flags."""
     cs = json.load(open(src))
     rows = []
+    cycles = [("h" + str(yr)[2:], yr) for yr in C.OFFER_HOUSE_YEARS]
     for fips, c in cs["counties"].items():
         row = {"fips": str(fips).zfill(5), "state": c.get("state"),
                "name": c.get("name")}
-        for cyc, yr in (("h22", 2022), ("h24", 2024), ("h26", 2026)):
+        for cyc, yr in cycles:
             h = c.get(cyc) or {}
             d, r, v = h.get("d"), h.get("r"), h.get("v")
             row[f"hmargin_{yr}"] = _tp_margin(d, r) if d is not None and r is not None else np.nan
@@ -144,9 +145,14 @@ def main():
     log["data_quality"]["geometries_without_2026"] = int(conus["hmargin_2026"].isna().sum())
 
     # --- Persist ------------------------------------------------------------
-    common = (["fips", "state", "name", "STATEFP", "weight", "eevp_2026", "ok_2026",
-               "hmargin_2022", "hmargin_2024", "hmargin_2026", "pmargin_2024", "pmargin_2020"]
-              + [k for k in swings] + [k + "_dev" for k in swings])
+    year_cols = []
+    for yr in C.OFFER_HOUSE_YEARS:
+        year_cols += [f"hmargin_{yr}", f"hvotes_{yr}", f"hcontested_{yr}"]
+    for yr in C.OFFER_PRES_YEARS:
+        year_cols += [f"pmargin_{yr}", f"pvotes_{yr}"]
+    base = (["fips", "state", "name", "STATEFP", "weight", "eevp_2026", "ok_2026"]
+            + [k for k in swings] + [k + "_dev" for k in swings] + year_cols)
+    common = list(dict.fromkeys(base))   # dedupe, keep order
     conus[["x", "y"] + common].to_csv(C.DATA_PROC / "stations.csv", index=False)
     allpts[["lon", "lat"] + common].to_csv(C.DATA_PROC / "stations_all.csv", index=False)
     gpd.GeoDataFrame({"name": ["CONUS"]},
