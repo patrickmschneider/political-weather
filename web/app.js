@@ -129,8 +129,13 @@ function positionPlaces(){
   const src = [];
   if (state.showCaps && state.capitals) src.push(...state.capitals.map(c => ({ ...c, t: 'cap' })));
   if (state.showMajors && state.majors) src.push(...state.majors.map(c => ({ ...c, t: 'maj' })));
+  // Cap how many places show, by population; ~20 at the national view, growing
+  // with zoom so smaller cities fill in as you zoom in.
+  const maxPlaces = Math.round(20 * Math.pow(t.k, 0.6));
   const pts = src.map(c => ({ ...c, X: t.applyX(sx(c.x)), Y: t.applyY(sy(c.y)) }))
-      .filter(c => c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10);
+      .filter(c => c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10)
+      .sort((a, b) => b.p - a.p)
+      .slice(0, maxPlaces);
   gCaps.selectAll('circle').data(pts, d => d.t + d.n).join('circle')
       .attr('class', d => d.t === 'cap' ? 'cap-dot' : 'maj-dot')
       .attr('cx', d => d.X).attr('cy', d => d.Y).attr('r', d => d.t === 'cap' ? 2.6 : 2.4);
