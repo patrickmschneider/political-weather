@@ -152,7 +152,11 @@ def main():
     gpd.GeoDataFrame({"name": ["CONUS"]},
                      geometry=[states.dissolve().geometry.iloc[0].buffer(0)],
                      crs=C.CRS_WORKING).to_file(C.DATA_PROC / "conus_land.gpkg", driver="GPKG")
-    states.to_file(C.DATA_PROC / "conus_states.gpkg", driver="GPKG")
+    # Keep only geometry + a plain-str STUSPS: newer pandas string dtypes break
+    # fiona's GPKG schema inference, so cast explicitly to object strings.
+    states_out = states[["STUSPS", "geometry"]].copy()
+    states_out["STUSPS"] = states_out["STUSPS"].astype(str).astype(object)
+    states_out.to_file(C.DATA_PROC / "conus_states.gpkg", driver="GPKG")
     json.dump(log, open(C.DATA_PROC / "data_quality_log.json", "w"), indent=2)
 
     print("=== Phase 1 complete (REAL provisional 2026 returns) ===")

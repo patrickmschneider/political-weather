@@ -1,7 +1,7 @@
 # Python 3.12. Pinned to a NumPy-1 compatible geospatial stack
 # (geopandas 1.x requires NumPy>=2, which breaks the Anaconda base pandas).
 numpy<2
-pandas>=2.0
+pandas>=2.0,<2.3  # 2.3's new string dtype breaks fiona GPKG schema inference
 scipy>=1.11
 matplotlib>=3.8
 geopandas>=0.14,<1.0
