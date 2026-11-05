@@ -62,19 +62,20 @@
 
 <div class="controls">
   <div class="ctl">
-    <label for="baseSel">Base year</label>
+    <label>View</label>
+    <div class="seg" id="mode">
+      <button data-mode="abs" class="active">Swing</button>
+      <button data-mode="dev">Deviation</button>
+      <button data-mode="margin">Margin (1 year)</button>
+    </div>
+  </div>
+  <div class="ctl">
+    <label for="baseSel" id="baseLabel">Base year</label>
     <select id="baseSel"></select>
   </div>
   <div class="ctl">
     <label for="cmpSel">Comparison year</label>
     <select id="cmpSel"></select>
-  </div>
-  <div class="ctl">
-    <label>View</label>
-    <div class="seg" id="mode">
-      <button data-mode="abs" class="active">Absolute swing</button>
-      <button data-mode="dev">Deviation from national</button>
-    </div>
   </div>
   <div class="ctl">
     <label>&nbsp;</label>
@@ -106,6 +107,6 @@
 <footer id="footer"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

@@ -55,7 +55,11 @@ async function load(){
   d3.select('#cmpSel').on('change', e => changePair('cmp', e.target.value));
   d3.selectAll('#mode button').on('click', function(){
     d3.selectAll('#mode button').classed('active', false);
-    d3.select(this).classed('active', true); state.mode = this.dataset.mode; render();
+    d3.select(this).classed('active', true); state.mode = this.dataset.mode;
+    const m = state.mode === 'margin';
+    d3.select('#baseSel').property('disabled', m).style('opacity', m ? 0.4 : 1);
+    d3.select('#baseLabel').text(m ? 'Base year (n/a)' : 'Base year');
+    render();
   });
   d3.select('#reset').on('click', () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity));
   d3.select('#capToggle').on('change', function(){ state.showCaps = this.checked; positionPlaces(); });
@@ -96,36 +100,43 @@ async function computeVmax(){
   const lod0 = state.meta.lods[0].name;
   const [gb, gc] = await Promise.all([ensureGrid(state.base, lod0), ensureGrid(state.cmp, lod0)]);
   const mask = state.landmask.mask;
-  const abs = [], dev = [];
+  const abs = [], dev = [], mar = [];
   for (let i = 0; i < gc.length; i++){
     if (mask[i] !== '1') continue;
     const s = gc[i] - gb[i];
-    abs.push(Math.abs(s)); dev.push(Math.abs(s - state.natl));
+    abs.push(Math.abs(s)); dev.push(Math.abs(s - state.natl)); mar.push(Math.abs(gc[i]));
   }
   const pct = (a, q) => { a.sort((x, y) => x - y); return a.length ? a[Math.floor(q * (a.length - 1))] : 10; };
   state.vmaxAbs = Math.max(2, Math.ceil(pct(abs, 0.98)));
   state.vmaxDev = Math.max(2, Math.ceil(pct(dev, 0.98)));
+  state.vmaxMargin = Math.max(2, Math.ceil(pct(mar, 0.98)));
 }
 
 function field(){
-  const gb = state.grids[state.base][state.lod.name], gc = state.grids[state.cmp][state.lod.name];
+  const gc = state.grids[state.cmp][state.lod.name];
+  const cl = state.meta.years[state.cmp].label;
+  if (state.mode === 'margin')
+    return { F: gc, vmax: state.vmaxMargin, title: `Margin (pts) · ${cl}` };
+  const gb = state.grids[state.base][state.lod.name];
+  const bl = state.meta.years[state.base].label;
   const swing = gc.map((v, i) => v - gb[i]);
-  const bl = state.meta.years[state.base].label, cl = state.meta.years[state.cmp].label;
   if (state.mode === 'abs')
-    return { F: swing, vmax: state.vmaxAbs, title: `Swing (pts) · ${bl} → ${cl}`, tipVal: v => v };
+    return { F: swing, vmax: state.vmaxAbs, title: `Swing (pts) · ${bl} → ${cl}` };
   return { F: swing.map(v => v - state.natl), vmax: state.vmaxDev,
-           title: `Deviation from national ${state.natl>0?'+':''}${state.natl.toFixed(1)} pts · ${bl} → ${cl}`,
-           tipVal: v => v - state.natl };
+           title: `Deviation from national ${state.natl>0?'+':''}${state.natl.toFixed(1)} pts · ${bl} → ${cl}` };
 }
 
 function render(){
-  if (!MPATH || !state.grids[state.base] || !state.grids[state.base][state.lod.name]
-      || !state.grids[state.cmp] || !state.grids[state.cmp][state.lod.name]) return;
+  if (!MPATH || !state.grids[state.cmp] || !state.grids[state.cmp][state.lod.name]) return;
+  if (state.mode !== 'margin' && (!state.grids[state.base] || !state.grids[state.base][state.lod.name])) return;
   const { F, vmax, title } = field();
   const color = colorScale(vmax);
   const step = vmax > 20 ? 3 : (vmax > 8 ? 2 : 1);
   const thr = d3.range(-Math.ceil(vmax/step)*step, Math.ceil(vmax/step)*step + step, step);
-  const contours = d3.contours().size([state.lod.nx, state.lod.ny]).thresholds(thr)(F);
+  // Clamp to the scale so values beyond +/-vmax stay filled (d3-contour only
+  // fills from the lowest threshold up; unclamped extremes leave white "eyes").
+  const Fc = F.map(v => v < -vmax ? -vmax : (v > vmax ? vmax : v));
+  const contours = d3.contours().size([state.lod.nx, state.lod.ny]).thresholds(thr)(Fc);
   const gpath = gridPath(state.lod), k = d3.zoomTransform(svg.node()).k;
   gContour.selectAll('path').data(contours).join('path')
       .attr('d', gpath).attr('fill', d => color(d.value + step/2))
@@ -200,9 +211,12 @@ function onMove(e){
   const X = MINX + ((px - t.x)/t.k - OFFX)/S, Y = MAXY - ((py - t.y)/t.k - OFFY)/S;
   let best = null, bd = 60000*60000;
   for (const c of state.counties){ const dx = c.x-X, dy = c.y-Y, d = dx*dx+dy*dy; if (d < bd){ bd = d; best = c; } }
-  const mb = best && best.m[state.base], mc = best && best.m[state.cmp];
-  if (mb == null || mc == null){ tip.style('opacity', 0); return; }
-  const val = field().tipVal(mc - mb);
+  if (!best){ tip.style('opacity', 0); return; }
+  const mc = best.m[state.cmp];
+  let val;
+  if (state.mode === 'margin'){ if (mc == null){ tip.style('opacity', 0); return; } val = mc; }
+  else { const mb = best.m[state.base]; if (mb == null || mc == null){ tip.style('opacity', 0); return; }
+         val = state.mode === 'dev' ? (mc - mb - state.natl) : (mc - mb); }
   tip.style('opacity', 1).style('left', (px+14)+'px').style('top', (py+10)+'px')
      .html(`<b>${best.n}</b>, ${best.s}<br><span class="v" style="color:${val>=0?'#2166ac':'#b2182b'}">`
            + `${val>=0?'+':''}${val.toFixed(1)} pts ${val>=0?'D':'R'}</span>`);
