@@ -48,11 +48,16 @@ cd web && python3 -m http.server 8777   # then open http://localhost:8777
 ## Interactive web app (`web/`)
 
 A dependency-light static site (D3 + `d3-contour`, no build step). The smoothed
-surface is exported as a grid plus base layers in projected grid-index
-coordinates; the browser computes the contour bands, so **baseline** and
+surface is exported as grids plus base layers in projected (EPSG:5070) metres;
+the browser computes the contour bands, so **baseline** and
 **absolute ↔ deviation** toggles are instant and no interpolation runs
-client-side. Pan/zoom and per-county hover tooltips are built in. Alaska is shown
-as "result pending" (see limitations); Hawaii appears on the static maps.
+client-side. Pan/zoom and per-county hover tooltips are built in.
+
+**Level of detail by zoom:** each baseline ships at two kernel bandwidths — a
+coarse 75 km surface shown when zoomed out and a finer 40 km surface that loads
+on demand and is revealed as you zoom in (the status line shows which is active).
+Static maps also default to the 75 km kernel on a 15 km grid. Alaska is shown as
+"result pending" (see limitations); Hawaii appears on the static maps.
 
 ### Deploy / auto-update
 

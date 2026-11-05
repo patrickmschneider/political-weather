@@ -1,26 +1,54 @@
 {
-  "nx": 186,
-  "ny": 117,
-  "fetched_at": "2026-11-05T05:25:01.783181-05:00",
-  "provenance": "mike10010100/elections-2026, site_data/county_shifts.json (compiles NYT precinct/county returns). PROVISIONAL, pre-certification.",
-  "baselines": {
-    "swing_H24_H26": {
-      "label": "2024 \u2192 2026 House",
-      "national": 14.61,
-      "abs_vmax": 32.0,
-      "dev_vmax": 17.0
-    },
-    "swing_H22_H26": {
-      "label": "2022 \u2192 2026 House (midterm-to-midterm)",
-      "national": 14.96,
-      "abs_vmax": 33.0,
-      "dev_vmax": 18.0
-    },
-    "swing_P24_H26": {
-      "label": "2024 President \u2192 2026 House (cross-election)",
-      "national": 13.77,
-      "abs_vmax": 24.0,
-      "dev_vmax": 13.0
-    }
+ "bounds": [
+  -2356113.7428980116,
+  268660.8651894862,
+  2258154.440899481,
+  3165721.6501298035
+ ],
+ "fetched_at": "2026-11-05T05:25:01.783181-05:00",
+ "provenance": "mike10010100/elections-2026, site_data/county_shifts.json (compiles NYT precinct/county returns). PROVISIONAL, pre-certification.",
+ "lods": [
+  {
+   "name": "coarse",
+   "bw_km": 75.0,
+   "zmin": 0.0,
+   "x0": -2356113.7428980116,
+   "y0": 268660.8651894862,
+   "dx": 18000,
+   "dy": 18000,
+   "nx": 258,
+   "ny": 162
+  },
+  {
+   "name": "fine",
+   "bw_km": 40.0,
+   "zmin": 3.0,
+   "x0": -2356113.7428980116,
+   "y0": 268660.8651894862,
+   "dx": 11000,
+   "dy": 11000,
+   "nx": 421,
+   "ny": 265
   }
+ ],
+ "baselines": {
+  "swing_H24_H26": {
+   "label": "2024 \u2192 2026 House",
+   "national": 14.61,
+   "abs_vmax": 34.0,
+   "dev_vmax": 20.0
+  },
+  "swing_H22_H26": {
+   "label": "2022 \u2192 2026 House (midterm-to-midterm)",
+   "national": 14.96,
+   "abs_vmax": 35.0,
+   "dev_vmax": 20.0
+  },
+  "swing_P24_H26": {
+   "label": "2024 President \u2192 2026 House (cross-election)",
+   "national": 13.77,
+   "abs_vmax": 26.0,
+   "dev_vmax": 16.0
+  }
+ }
 }

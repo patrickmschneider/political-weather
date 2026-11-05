@@ -34,7 +34,14 @@ CRS_WORKING = "EPSG:5070"
 EXCLUDE_STATEFP = {"02", "15", "60", "66", "69", "72", "78"}  # AK, HI, AS, GU, MP, PR, VI
 
 # --- Interpolation grid -----------------------------------------------------
-GRID_RES_M = 25_000  # 25 km grid cell -> fine enough for smooth isolines
+GRID_RES_M = 15_000  # 15 km grid cell -> crisp isolines for the 75 km kernel
+
+# Web level-of-detail: coarser surface when zoomed out, finer revealed on zoom.
+# (name, gaussian bandwidth m, grid resolution m, min zoom scale to show)
+WEB_LODS = [
+    ("coarse", 75_000, 18_000, 0.0),
+    ("fine",   40_000, 11_000, 3.0),
+]
 
 # --- Inset regions (own equal-area projections) -----------------------------
 CRS_AK = "EPSG:3338"  # Alaska Albers Equal Area
@@ -45,7 +52,7 @@ HI_GRID_RES_M = 1_500
 HI_BANDWIDTH_M = 30_000
 
 # --- Method hyperparameters (tuned/validated in cross_validate.py) ----------
-GAUSSIAN_BANDWIDTH_M = 120_000   # kernel std dev (metres)
+GAUSSIAN_BANDWIDTH_M = 75_000    # kernel std dev (metres); reveals metro structure
 IDW_POWER = 2.0
 IDW_K = 32                       # nearest neighbours used per grid point
 IDW_MIN_DIST_M = 5_000           # avoid singularity at a station
