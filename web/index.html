@@ -58,7 +58,7 @@
   .row{display:flex;gap:12px;align-items:center}
   .ctl-labels{display:grid;grid-template-columns:auto auto;column-gap:16px;row-gap:3px;align-items:center}
   .ctl-labels > label:first-child{grid-column:1 / -1}
-  #legend-svg{display:block;width:320px;max-width:100%;height:auto}
+  #legend-svg{display:block;width:352px;max-width:100%;height:auto;overflow:visible}
   .short{display:none}
 
   /* ---- Phones (portrait or landscape): page scrolls, map gets the full width ---- */
@@ -126,7 +126,7 @@
   </div>
   <div id="legend">
     <span class="legend-title" id="legend-title"></span>
-    <svg id="legend-svg" viewBox="0 0 320 50"></svg>
+    <svg id="legend-svg" viewBox="-16 0 352 50"></svg>
   </div>
   <div class="note">
     <div id="status" style="font-weight:600;color:#333"></div>
@@ -141,6 +141,6 @@
 <footer id="footer"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>
