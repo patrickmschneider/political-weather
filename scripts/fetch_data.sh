@@ -26,6 +26,12 @@ echo "[2b] Census 2020 tract population centres (places county votes where peopl
 mkdir -p "$RAW/cenpop"
 curl -fsSL -o "$RAW/cenpop/CenPop2020_Mean_TR.txt" "https://www2.census.gov/geo/docs/reference/cenpop2020/tract/CenPop2020_Mean_TR.txt"
 
+echo "[2c] Census tract-to-congressional-district relationships (2022 + 2024 maps)"
+mkdir -p "$RAW/cdrel"
+rel="https://www2.census.gov/geo/docs/maps-data/data/rel2020/cd-sld"
+curl -fsSL -o "$RAW/cdrel/tract_cd118.txt" "$rel/tab20_cd11820_tract20_natl.txt"
+curl -fsSL -o "$RAW/cdrel/tract_cd119.txt" "$rel/tab20_cd11920_tract20_natl.txt"
+
 echo "[3/4] Place names for zoom-in labels — GeoNames cities15000 (CC BY 4.0)"
 mkdir -p "$RAW/geonames"
 curl -fsSL -o "$RAW/geonames/cities15000.zip" "https://download.geonames.org/export/dump/cities15000.zip"

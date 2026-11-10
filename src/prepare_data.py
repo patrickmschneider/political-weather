@@ -64,25 +64,65 @@ def _tp(x):
     return (x["d"] - x["r"]) / (x["d"] + x["r"]) * 100.0
 
 
-def one_party_states(overview) -> dict:
-    """{year: {state: {'D','R'}}} - states with a one-party / unopposed House
-    district that year, and which party it inflates. From the feed's per-district
-    flags (2026) and office_history 'op' flags (earlier cycles)."""
+def one_party_districts(overview) -> dict:
+    """{year: {(state, 'NN'): 'D'|'R'}} - House districts with no genuine
+    D-vs-R contest that year, and which party the county totals over-count.
+    A district counts if the feed flags it as having no major-party opponent
+    ('op'), OR its two-party margin is +/-100 (same-party top-two races such as
+    WA-9 / CA-16 2024 are not 'op'-flagged), OR (2026) one_party/uncontested."""
     out = {}
     for r in overview.get("house_races", []):
-        st = r["state"]
+        st, num = r["state"], str(r.get("seat_number") or "0")
+        num = num.zfill(2) if num.isdigit() else "00"
         for yr, h in (r.get("office_history") or {}).items():
-            if h.get("op") and h.get("m") is not None:
-                out.setdefault(int(yr), {}).setdefault(st, set()).add("D" if h["m"] > 0 else "R")
+            m = h.get("m")
+            m2 = r.get("margin_2024_house") if yr == "2024" else None
+            if m2 is not None and abs(m2) >= 99.9:
+                out.setdefault(int(yr), {})[(st, num)] = "D" if m2 > 0 else "R"
+            elif m is not None and (h.get("op") or abs(m) >= 99.9):
+                out.setdefault(int(yr), {})[(st, num)] = "D" if m > 0 else "R"
         if r.get("one_party") or r.get("uncontested"):
             parties = {c.get("party") for c in r.get("candidates", []) if c.get("votes")}
-            for p, lab in (("DEM", "D"), ("GOP", "R")):
-                if parties and parties <= {p, "IND", "NPP", "OTH", None} and p in parties:
-                    out.setdefault(2026, {}).setdefault(st, set()).add(lab)
             if "DEM" in parties and "GOP" not in parties:
-                out.setdefault(2026, {}).setdefault(st, set()).add("D")
-            if "GOP" in parties and "DEM" not in parties:
-                out.setdefault(2026, {}).setdefault(st, set()).add("R")
+                out.setdefault(2026, {})[(st, num)] = "D"
+            elif "GOP" in parties and "DEM" not in parties:
+                out.setdefault(2026, {})[(st, num)] = "R"
+    # At-large states: the Census relationship files use district '00'.
+    n_by_state = {}
+    for r in overview.get("house_races", []):
+        n_by_state[r["state"]] = n_by_state.get(r["state"], 0) + 1
+    for yr in out:
+        out[yr] = {((s, "00") if n_by_state.get(s) == 1 else (s, d)): p for (s, d), p in out[yr].items()}
+    return out
+
+
+def county_district_shares(path) -> pd.DataFrame:
+    """County population share in each congressional district, from a Census
+    tract-to-CD relationship file (tract land split) and 2020 tract population."""
+    rel = pd.read_csv(path, sep="|", dtype=str, encoding="utf-8-sig",
+                      usecols=["GEOID_CD119_20" if "119" in str(path) else "GEOID_CD118_20",
+                               "GEOID_TRACT_20", "AREALAND_TRACT_20", "AREALAND_PART"])
+    rel.columns = ["cd", "tract", "aland", "apart"]
+    rel = rel.dropna(subset=["cd", "tract"])
+    a, p = rel["aland"].astype(float), rel["apart"].astype(float)
+    rel["frac"] = np.where(a > 0, p / a, 1.0)
+    pop = pd.read_csv(C.TRACT_CENPOP, dtype=str, encoding="utf-8-sig")
+    pop["tract"] = pop["STATEFP"] + pop["COUNTYFP"] + pop["TRACTCE"]
+    pop["pop"] = pop["POPULATION"].astype(float)
+    rel = rel.merge(pop[["tract", "pop"]], on="tract", how="left").fillna({"pop": 0.0})
+    rel["fips"] = rel["tract"].str[:5]
+    rel["w"] = rel["frac"] * rel["pop"]
+    g = rel.groupby(["fips", "cd"])["w"].sum().reset_index()
+    g["share"] = g["w"] / g.groupby("fips")["w"].transform("sum")
+    return g
+
+
+def one_party_states(overview) -> dict:
+    """{year: {state: {'D','R'}}} - states with a one-party district that year."""
+    out = {}
+    for yr, d in one_party_districts(overview).items():
+        for (st, _), p in d.items():
+            out.setdefault(yr, {}).setdefault(st, set()).add(p)
     return out
 
 
@@ -97,8 +137,22 @@ def contaminated_house(src, overview, years) -> dict:
     district (see config.ONE_PARTY_RESID_PTS)."""
     cs = json.load(open(src))["counties"]
     ops = one_party_states(overview)
+    opd = one_party_districts(overview)
     bad, log = {}, {}
     for yr in years:
+        # Exact route: Census county-district overlap for this year's map.
+        relp = C.CD_TRACT_REL.get(yr)
+        if relp is not None and relp.exists():
+            sh = county_district_shares(relp)
+            st_fips = {v: k for k, v in json.load(open(C.SOURCE_2026))["state_fips_to_postal"].items()}
+            flagged = {st_fips[s] + d: p for (s, d), p in opd.get(yr, {}).items() if s in st_fips}
+            hit = sh[sh["cd"].isin(flagged.keys())].groupby("fips")["share"].sum()
+            hit = hit[hit >= C.ONE_PARTY_OVERLAP_MIN]
+            for f in hit.index:
+                bad[(f, yr)] = True
+            log[yr] = {"excluded": int(len(hit)), "method": "census_cd_overlap",
+                       "districts": len(flagged)}
+            continue
         key = "h" + str(yr)[2:]
         resid = {}
         for fips, c in cs.items():

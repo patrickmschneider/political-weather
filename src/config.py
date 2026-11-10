@@ -102,6 +102,12 @@ MIN_2026_COUNTIES = 2500
 # (ticket-splitting years like 2016 are much noisier), floored at this value.
 ONE_PARTY_RESID_PTS = 12.0
 ONE_PARTY_RESID_Q = 0.98
+# Where Census county-district relationships exist for that year's map, use
+# them instead: exclude a county whose population is at least this share in
+# a one-party district. (2022 = 118th Congress map, 2024 = 119th.)
+CD_TRACT_REL = {2022: DATA_RAW / "cdrel" / "tract_cd118.txt",
+                2024: DATA_RAW / "cdrel" / "tract_cd119.txt"}
+ONE_PARTY_OVERLAP_MIN = 0.05
 
 # --- Year surfaces offered in the web app's base/comparison pickers ---------
 # Each becomes one smoothed margin surface; the app differences any two.
