@@ -50,19 +50,51 @@
   footer{padding:8px 20px 16px;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}
   .note{font-size:11px;color:var(--muted);margin-left:auto;max-width:340px}
   a{color:#2166ac}
+  .row{display:flex;gap:12px;align-items:center}
+  .ctl-labels{display:grid;grid-template-columns:auto auto;column-gap:16px;row-gap:3px;align-items:center}
+  .ctl-labels > label:first-child{grid-column:1 / -1}
+  #legend-svg{display:block;width:320px;max-width:100%;height:auto}
+  .short{display:none}
+
+  /* ---- Phones (portrait or landscape): page scrolls, map gets the full width ---- */
+  @media (max-width: 700px), (max-height: 560px){
+    body{display:block;height:auto;overflow:visible}
+    header{padding:10px 14px 8px}
+    h1{font-size:20px}
+    .sub{font-size:13px}
+    .long{display:none} .short{display:inline}
+    .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:10px 14px;position:static}
+    .ctl-view,#legend{grid-column:1 / -1}
+    .seg{display:flex}
+    .seg button{flex:1;padding:8px 6px}
+    /* 16px stops iOS Safari zooming the page when a picker is focused */
+    select,.seg button,#reset{font-size:16px}
+    select{width:100%;padding:7px 8px}
+    .ctl-labels{grid-column:1 / -1;display:flex;flex-direction:row;align-items:center;justify-content:space-between}
+    .ctl-labels > label:first-child{display:none}
+    .chk{font-size:14px}
+    .chk input{width:18px;height:18px}
+    #reset{padding:6px 10px}
+    #legend-svg{width:100%;max-width:440px}
+    .note{display:none}
+    #wrap{flex:none;aspect-ratio:1.5 / 1;max-height:94vh;border-bottom:1px solid var(--line);touch-action:none}
+    footer{padding:10px 14px 24px;border-top:0}
+    .tip{max-width:60vw}
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>Political <span class="pun">Weather</span> <span class="badge">PROVISIONAL</span></h1>
   <div class="sub">U.S. elections drawn like weather charts: isolines connect counties of equal value.
-    Pick any two elections (House 2014–2026, President 2008–2024) to map the <b>swing</b> between them or
-    each county's <b>deviation</b> from the national swing — or show a single year's Dem–Rep <b>margin</b>.
-    Drag to pan, scroll to zoom, hover for county detail.</div>
+    <span class="long">Pick any two elections (House 2014–2026, President 2008–2024) to map the <b>swing</b> between them or
+    each county's <b>deviation</b> from the national swing — or show a single year's Dem–Rep <b>margin</b>.</span>
+    <span class="long">Drag to pan, scroll to zoom, hover for county detail.</span>
+    <span class="short">Pinch to zoom, tap for county detail.</span></div>
 </header>
 
 <div class="controls">
-  <div class="ctl">
+  <div class="ctl ctl-view">
     <label>View</label>
     <div class="seg" id="mode">
       <button data-mode="margin">Margin</button>
@@ -78,25 +110,20 @@
     <label for="baseSel" id="baseLabel">Baseline</label>
     <select id="baseSel"></select>
   </div>
-  <div class="ctl">
-    <label>&nbsp;</label>
-    <button id="reset">Reset zoom</button>
-  </div>
-  <div class="ctl">
+  <div class="ctl ctl-labels">
     <label>Labels</label>
-    <label class="chk"><input type="checkbox" id="capToggle" checked> Capitals</label>
-  </div>
-  <div class="ctl">
-    <label>&nbsp;</label>
-    <label class="chk"><input type="checkbox" id="majToggle" checked> Major cities</label>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="capToggle" checked> Capitals</label>
+      <label class="chk"><input type="checkbox" id="majToggle" checked> Major cities</label>
+    </div>
+    <button id="reset">Reset zoom</button>
   </div>
   <div id="legend">
     <span class="legend-title" id="legend-title"></span>
-    <svg id="legend-svg" width="320" height="50"></svg>
+    <svg id="legend-svg" viewBox="0 0 320 50"></svg>
   </div>
   <div class="note">
     <div id="status" style="font-weight:600;color:#333"></div>
-    Alaska: at-large RCV result pending. Hawai&#699;i: see the static maps in the repo.
   </div>
 </div>
 
@@ -108,6 +135,6 @@
 <footer id="footer"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

@@ -72,13 +72,16 @@ async function load(){
     `Source: <a href="https://github.com/mike10010100/elections-2026" target="_blank" rel="noopener">mike10010100/elections-2026</a>
      (compiles NYT returns${srcCommit(meta)}) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
      CONUS Albers Equal Area · difference of Gaussian-smoothed per-year margins, weighted by two-party votes ·
-     uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.`);
+     uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.
+     Alaska: at-large RCV result pending. Hawai&#699;i: see the static maps in the repo.`);
 
   computePairStats();
   await Promise.all([ensureGrid(state.base, state.lod.name), ensureGrid(state.cmp, state.lod.name)]);
   await computeVmax();
   resize();
-  window.addEventListener('resize', resize);
+  // Re-fit whenever the map box changes size: window resizes, rotation, and the
+  // shared site header arriving after first paint (it shrinks the map area).
+  new ResizeObserver(resize).observe(document.getElementById('wrap'));
 }
 
 // Which upstream snapshot was used; flags a fallback when the latest was degraded.
@@ -165,7 +168,7 @@ function drawLegend(vmax, color, title){
       .attr('x', i => i*(w/n)).attr('width', w/n+1).attr('height', h).attr('fill', i => color(x(i)));
   const sc = d3.scaleLinear().domain([-vmax, vmax]).range([0, w]);
   lsvg.append('g').attr('transform', `translate(0,${h})`)
-      .call(d3.axisBottom(sc).tickValues(d3.range(-vmax, vmax+1, vmax > 15 ? 10 : 5)).tickSize(4).tickFormat(d => (d>0?'+':'')+d))
+      .call(d3.axisBottom(sc).tickValues((st => d3.range(-Math.floor(vmax/st)*st, vmax+0.001, st))(vmax > 25 ? 10 : 5)).tickSize(4).tickFormat(d => (d>0?'+':'')+d))
       .call(g => g.select('.domain').remove()).selectAll('text').attr('font-size', 9);
   lsvg.append('text').attr('x', 0).attr('y', 47).attr('font-size', 10).attr('font-weight', 600)
       .attr('fill', '#b2182b').text('← more Republican');
@@ -180,7 +183,7 @@ function positionPlaces(){
   const src = [];
   if (state.showCaps && state.capitals) src.push(...state.capitals.map(c => ({ ...c, t: 'cap' })));
   if (state.showMajors && state.majors) src.push(...state.majors.map(c => ({ ...c, t: 'maj' })));
-  const maxPlaces = Math.round(20 * Math.pow(t.k, 0.6));
+  const maxPlaces = Math.round(20 * Math.min(1, W / 900) * Math.pow(t.k, 0.6)) + 4;
   const pts = src.map(c => ({ ...c, X: t.applyX(sx(c.x)), Y: t.applyY(sy(c.y)) }))
       .filter(c => c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10)
       .sort((a, b) => b.p - a.p).slice(0, maxPlaces);
@@ -189,13 +192,16 @@ function positionPlaces(){
       .attr('cx', d => d.X).attr('cy', d => d.Y).attr('r', d => d.t === 'cap' ? 2.6 : 2.4);
   const placed = [], show = [];
   for (const c of pts){
-    const w = c.n.length*6 + 8, box = [c.X+5, c.Y-6, c.X+5+w, c.Y+6];
+    const w = c.n.length*6 + 8;
+    c.left = c.X + 5 + w > W;   // flip the label left of the dot at the right edge
+    const box = c.left ? [c.X-5-w, c.Y-6, c.X-5, c.Y+6] : [c.X+5, c.Y-6, c.X+5+w, c.Y+6];
     if (placed.some(p => !(box[2]<p[0] || box[0]>p[2] || box[3]<p[1] || box[1]>p[3]))) continue;
     placed.push(box); show.push(c);
   }
   gCaps.selectAll('text').data(show, d => d.t + d.n).join('text')
       .attr('class', d => d.t === 'cap' ? 'cap-label' : 'cap-label maj-label')
-      .attr('x', d => d.X+5).attr('y', d => d.Y+3).text(d => d.n);
+      .attr('x', d => d.left ? d.X-5 : d.X+5).attr('text-anchor', d => d.left ? 'end' : 'start')
+      .attr('y', d => d.Y+3).text(d => d.n);
 }
 
 const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', async e => {
@@ -211,7 +217,7 @@ const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', async e => {
   }
 });
 svg.call(zoom)
-   .on('mousemove', onMove).on('mouseleave', () => tip.style('opacity', 0))
+   .on('mousemove', onMove).on('click', onMove).on('mouseleave', () => tip.style('opacity', 0))
    .on('mousedown', () => svg.classed('grabbing', true)).on('mouseup', () => svg.classed('grabbing', false));
 
 function onMove(e){
@@ -226,14 +232,23 @@ function onMove(e){
   if (state.mode === 'margin'){ if (mc == null){ tip.style('opacity', 0); return; } val = mc; }
   else { const mb = best.m[state.base]; if (mb == null || mc == null){ tip.style('opacity', 0); return; }
          val = state.mode === 'dev' ? (mc - mb - state.natl) : (mc - mb); }
-  tip.style('opacity', 1).style('left', (px+14)+'px').style('top', (py+10)+'px')
+  tip.style('opacity', 1)
      .html(`<b>${best.n}</b>, ${best.s}<br><span class="v" style="color:${val>=0?'#2166ac':'#b2182b'}">`
            + `${val>=0?'+':''}${val.toFixed(1)} pts ${val>=0?'D':'R'}</span>`);
+  // keep the tooltip inside the map (matters on narrow screens)
+  const W = svg.node().clientWidth, H = svg.node().clientHeight, tn = tip.node();
+  const tw = tn.offsetWidth, th = tn.offsetHeight;
+  const left = px + 14 + tw > W ? Math.max(4, px - 14 - tw) : px + 14;
+  const top = py + 10 + th > H ? Math.max(4, py - 10 - th) : py + 10;
+  tip.style('left', left + 'px').style('top', top + 'px');
 }
 
+let lastW = 0, lastH = 0;
 function resize(){
   const wrap = document.getElementById('wrap');
   const W = wrap.clientWidth, H = wrap.clientHeight;
+  if (W === lastW && H === lastH) return;
+  lastW = W; lastH = H;
   S = Math.min(W/(MAXX-MINX), H/(MAXY-MINY)) * 0.98;
   OFFX = (W - (MAXX-MINX)*S)/2; OFFY = (H - (MAXY-MINY)*S)/2;
   MPATH = metrePath();
