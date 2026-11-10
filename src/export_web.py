@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import shapely
+import shapely.ops
 from pyproj import Transformer
 
 import interpolate as I
@@ -107,6 +108,16 @@ def main():
 
     # base layers
     json.dump(_fc(states, ["STUSPS"]), open(WEB_DATA / "states.json", "w"))
+    # State-code label anchors: an interior point of each state's LARGEST part
+    # (so MI sits on the Lower Peninsula), with area to prioritise big states.
+    slabels = []
+    for _, r in states.iterrows():
+        g = r.geometry
+        main = max(getattr(g, "geoms", [g]), key=lambda p: p.area)
+        pt = shapely.ops.polylabel(main, tolerance=2000) if hasattr(shapely.ops, "polylabel") else main.representative_point()
+        slabels.append({"n": str(r["STUSPS"]), "x": round(pt.x), "y": round(pt.y),
+                        "a": round(g.area / 1e9)})
+    json.dump(slabels, open(WEB_DATA / "state_labels.json", "w"))
     json.dump(_fc(land), open(WEB_DATA / "land.json", "w"))
 
     # county per-year margins (null where uncontested/missing) for tooltips + scale
@@ -127,6 +138,9 @@ def main():
                 for n, s, lat, lon, pop in rows]
     json.dump(project(CAP.CAPITALS), open(WEB_DATA / "capitals.json", "w"))
     json.dump(project(CAP.MAJORS), open(WEB_DATA / "majors.json", "w"))
+    towns = CAP.load_towns(C.DATA_RAW / CAP.TOWNS_SRC, CAP.CAPITALS + CAP.MAJORS)
+    json.dump(project(towns), open(WEB_DATA / "towns.json", "w"))
+    print(f"Towns for zoom labels: {len(towns)}")
 
     json.dump(meta, open(WEB_DATA / "meta.json", "w"), indent=1)
     # drop stale single-baseline grids from the previous model

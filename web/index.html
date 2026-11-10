@@ -42,6 +42,11 @@
   .cap-label{font-size:11px;fill:#1a1a1a;paint-order:stroke;stroke:#fff;stroke-width:3px;
     stroke-linejoin:round;pointer-events:none}
   .maj-label{fill:#444}
+  .st-label{font-size:13px;font-weight:700;letter-spacing:1px;fill:#222;fill-opacity:.55;
+    paint-order:stroke;stroke:#fff;stroke-opacity:.6;stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+  .st-label.st-narrow{font-size:10.5px;letter-spacing:.5px}
+  .town-dot{fill:#666;stroke:#fff;stroke-width:.8}
+  .town-label{font-size:10px;fill:#555}
   .chk{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none}
   .tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);
     border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 2px 8px #0002;opacity:0;transition:opacity .08s}
@@ -113,8 +118,9 @@
   <div class="ctl ctl-labels">
     <label>Labels</label>
     <div class="row">
+      <label class="chk"><input type="checkbox" id="stToggle" checked> States</label>
       <label class="chk"><input type="checkbox" id="capToggle" checked> Capitals</label>
-      <label class="chk"><input type="checkbox" id="majToggle" checked> Major cities</label>
+      <label class="chk"><input type="checkbox" id="majToggle" checked> Cities</label>
     </div>
     <button id="reset">Reset zoom</button>
   </div>
@@ -135,6 +141,6 @@
 <footer id="footer"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 'use strict';
 
 const DATA = 'data/';
-const state = { meta:null, grids:{}, states:null, land:null, counties:null, capitals:null, majors:null,
+const state = { meta:null, grids:{}, states:null, land:null, counties:null, capitals:null, majors:null, towns:[], stateLabels:[], showStates:true,
                 landmask:null, base:null, cmp:null, mode:'abs', lod:null, loading:{},
                 showCaps:true, showMajors:true, vmaxAbs:10, vmaxDev:10, natl:0 };
 
@@ -41,6 +41,9 @@ async function load(){
   const [states, land, counties, capitals, majors, landmask] = await Promise.all([
     d3.json(DATA + 'states.json'), d3.json(DATA + 'land.json'), d3.json(DATA + 'counties.json'),
     d3.json(DATA + 'capitals.json'), d3.json(DATA + 'majors.json'), d3.json(DATA + 'landmask_coarse.json')]);
+  // Smaller towns only matter once zoomed in, so load them in the background.
+  d3.json(DATA + 'state_labels.json').then(t => { state.stateLabels = t; positionPlaces(); }).catch(() => {});
+  d3.json(DATA + 'towns.json').then(t => { state.towns = t; positionPlaces(); }).catch(() => {});
   state.states = states; state.land = land; state.counties = counties;
   state.capitals = capitals; state.majors = majors; state.landmask = landmask;
   state.base = meta.default.base; state.cmp = meta.default.comparison; state.lod = meta.lods[0];
@@ -63,6 +66,7 @@ async function load(){
   });
   d3.select('#reset').on('click', () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity));
   d3.select('#capToggle').on('change', function(){ state.showCaps = this.checked; positionPlaces(); });
+  d3.select('#stToggle').on('change', function(){ state.showStates = this.checked; positionPlaces(); });
   d3.select('#majToggle').on('change', function(){ state.showMajors = this.checked; positionPlaces(); });
 
   svg.append('clipPath').attr('id', 'landclip').append('path');
@@ -73,6 +77,7 @@ async function load(){
      (compiles NYT returns${srcCommit(meta)}) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
      CONUS Albers Equal Area · difference of Gaussian-smoothed per-year margins, weighted by two-party votes ·
      uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.
+     Place names: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0).
      Alaska: at-large RCV result pending. Hawai&#699;i: see the static maps in the repo.`);
 
   computePairStats();
@@ -180,26 +185,61 @@ function positionPlaces(){
   if (!MPATH){ gCaps.selectAll('*').remove(); return; }
   const t = d3.zoomTransform(svg.node());
   const W = svg.node().clientWidth, H = svg.node().clientHeight;
-  const src = [];
-  if (state.showCaps && state.capitals) src.push(...state.capitals.map(c => ({ ...c, t: 'cap' })));
-  if (state.showMajors && state.majors) src.push(...state.majors.map(c => ({ ...c, t: 'maj' })));
-  const maxPlaces = Math.round(20 * Math.min(1, W / 900) * Math.pow(t.k, 0.6)) + 4;
-  const pts = src.map(c => ({ ...c, X: t.applyX(sx(c.x)), Y: t.applyY(sy(c.y)) }))
-      .filter(c => c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10)
-      .sort((a, b) => b.p - a.p).slice(0, maxPlaces);
-  gCaps.selectAll('circle').data(pts, d => d.t + d.n).join('circle')
-      .attr('class', d => d.t === 'cap' ? 'cap-dot' : 'maj-dot')
-      .attr('cx', d => d.X).attr('cy', d => d.Y).attr('r', d => d.t === 'cap' ? 2.6 : 2.4);
-  const placed = [], show = [];
-  for (const c of pts){
-    const w = c.n.length*6 + 8;
+  const narrow = W < 600;
+  const onScreen = c => { c.X = t.applyX(sx(c.x)); c.Y = t.applyY(sy(c.y));
+                          return c.X > -20 && c.X < W+20 && c.Y > -10 && c.Y < H+10; };
+  const hits = box => placed.some(p => !(box[2]<p[0] || box[0]>p[2] || box[3]<p[1] || box[1]>p[3]));
+
+  // Placement order (each claims space the next must avoid):
+  //   1. capitals + major cities, by population
+  //   2. two-letter state codes, biggest states first
+  //   3. smaller towns, by population — only once zoomed in (k >= 2)
+  // The label budget grows with zoom; collision checks keep it legible.
+  const maxPlaces = Math.round((20 * Math.min(1, W / 900) + 4) * Math.pow(t.k, 1.1));
+  const placed = [], show = [], stShow = [];
+  const placeCity = c => {
+    const w = c.n.length * (c.t === 'town' ? 5.4 : 6) + 8;
     c.left = c.X + 5 + w > W;   // flip the label left of the dot at the right edge
     const box = c.left ? [c.X-5-w, c.Y-6, c.X-5, c.Y+6] : [c.X+5, c.Y-6, c.X+5+w, c.Y+6];
-    if (placed.some(p => !(box[2]<p[0] || box[0]>p[2] || box[3]<p[1] || box[1]>p[3]))) continue;
-    placed.push(box); show.push(c);
+    if (hits(box)) return;
+    placed.push(box, [c.X-3, c.Y-3, c.X+3, c.Y+3]); show.push(c);
+  };
+
+  const curated = [];
+  if (state.showCaps && state.capitals) curated.push(...state.capitals.map(c => ({ ...c, t: 'cap' })));
+  if (state.showMajors && state.majors) curated.push(...state.majors.map(c => ({ ...c, t: 'maj' })));
+  for (const c of curated.filter(onScreen).sort((a, b) => b.p - a.p)){
+    if (show.length >= maxPlaces) break;
+    placeCity(c);
   }
-  gCaps.selectAll('text').data(show, d => d.t + d.n).join('text')
-      .attr('class', d => d.t === 'cap' ? 'cap-label' : 'cap-label maj-label')
+
+  if (state.showStates){
+    const half = narrow ? 9 : 12;
+    for (const c of state.stateLabels.map(c => ({ ...c })).filter(onScreen).sort((a, b) => b.a - a.a)){
+      if (c.X < 0 || c.X > W || c.Y < 0 || c.Y > H) continue;
+      const box = [c.X-half, c.Y-7, c.X+half, c.Y+7];
+      if (hits(box)) continue;
+      placed.push(box); stShow.push(c);
+    }
+  }
+
+  if (state.showMajors && t.k >= 2){
+    for (const c of state.towns){
+      if (show.length >= maxPlaces) break;   // towns are pre-sorted by population
+      const d = { ...c, t: 'town' };
+      if (onScreen(d)) placeCity(d);
+    }
+  }
+
+  gCaps.selectAll('text.st-label').data(stShow, d => d.n).join('text')
+      .attr('class', narrow ? 'st-label st-narrow' : 'st-label')
+      .attr('x', d => d.X).attr('y', d => d.Y + (narrow ? 4 : 5)).attr('text-anchor', 'middle').text(d => d.n);
+  // Dots only for places that got a label, so unlabeled towns don't clutter.
+  gCaps.selectAll('circle').data(show, d => d.t + d.n + d.s).join('circle')
+      .attr('class', d => d.t === 'cap' ? 'cap-dot' : (d.t === 'town' ? 'town-dot' : 'maj-dot'))
+      .attr('cx', d => d.X).attr('cy', d => d.Y).attr('r', d => d.t === 'cap' ? 2.6 : (d.t === 'town' ? 1.8 : 2.4));
+  gCaps.selectAll('text.cap-label').data(show, d => d.t + d.n + d.s).join('text')
+      .attr('class', d => d.t === 'cap' ? 'cap-label' : (d.t === 'town' ? 'cap-label town-label' : 'cap-label maj-label'))
       .attr('x', d => d.left ? d.X-5 : d.X+5).attr('text-anchor', d => d.left ? 'end' : 'start')
       .attr('y', d => d.Y+3).text(d => d.n);
 }
@@ -253,7 +293,9 @@ function resize(){
   OFFX = (W - (MAXX-MINX)*S)/2; OFFY = (H - (MAXY-MINY)*S)/2;
   MPATH = metrePath();
   svg.select('#landclip path').attr('d', MPATH(state.land));
-  svg.call(zoom.transform, d3.zoomIdentity);
+  // Keep the viewer's zoom across re-fits (layout shifts, rotation); the first
+  // fit starts at the identity transform anyway.
+  svg.call(zoom.transform, d3.zoomTransform(svg.node()));
   render();
 }
 

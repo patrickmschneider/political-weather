@@ -59,6 +59,58 @@ CAPITALS = [
 
 # Major cities that are NOT state capitals (contiguous US), by city population
 # (thousands). Deduped against CAPITALS by construction. (name, state, lat, lon, pop)
+TOWNS_SRC = "geonames/cities15000.txt"   # under data/raw; see fetch_data.sh
+
+# GeoNames lists the NYC boroughs as separate cities; they sit on top of "New York".
+# Plus known GeoNames errors (below).
+_SKIP = {("Brooklyn", "NY"), ("Queens", "NY"), ("Manhattan", "NY"),
+         ("The Bronx", "NY"), ("Staten Island", "NY"),
+         # GeoNames data errors: a duplicate of Lexington, and a tiny place
+         # listed with Lexington's population.
+         ("Lexington-Fayette", "KY"), ("Meads", "KY")}
+_CONUS_EXCLUDE = {"AK", "HI", "PR", "VI", "GU", "AS", "MP"}
+
+
+def load_towns(path, curated, min_km=10.0, dup_km=5.0):
+    """Extra places (pop >= 15k) for labels revealed on zoom, from a GeoNames
+    dump. Drops neighbourhood entries, non-CONUS places, NYC boroughs and any
+    town within min_km of a curated capital/major city (same place, other name).
+    Returns rows shaped like CAPITALS: (name, state, lat, lon, pop_thousands)."""
+    import math
+    keep_codes = {"PPL", "PPLA", "PPLA2", "PPLA3", "PPLC"}
+    cur = [(math.radians(lat), math.radians(lon)) for _, _, lat, lon, _ in curated]
+    def near(lat, lon):
+        la, lo = math.radians(lat), math.radians(lon)
+        for cl, co in cur:
+            d = 6371 * math.acos(min(1, math.sin(la)*math.sin(cl) + math.cos(la)*math.cos(cl)*math.cos(lo-co)))
+            if d < min_km:
+                return True
+        return False
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            r = line.rstrip("\n").split("\t")
+            if len(r) < 15 or r[8] != "US" or r[7] not in keep_codes:
+                continue
+            name, st = r[1], r[10]
+            if st in _CONUS_EXCLUDE or (name, st) in _SKIP:
+                continue
+            lat, lon, pop = float(r[4]), float(r[5]), int(r[14] or 0)
+            if pop < 15000 or near(lat, lon):
+                continue
+            out.append((name, st, lat, lon, round(pop / 1000)))
+    # Collapse duplicates GeoNames lists twice under two names
+    # (e.g. "Lexington" / "Lexington-Fayette"): keep the larger one.
+    out.sort(key=lambda t: -t[4])
+    kept = []
+    for t in out:
+        cosl = math.cos(math.radians(t[2]))
+        if any(((t[2]-k[2])*111) ** 2 + ((t[3]-k[3])*111*cosl) ** 2 < dup_km ** 2 for k in kept):
+            continue
+        kept.append(t)
+    return kept
+
+
 MAJORS = [
     ("New York", "NY", 40.713, -74.006, 8336),
     ("Los Angeles", "CA", 34.052, -118.244, 3980),
