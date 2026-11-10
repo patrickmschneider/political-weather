@@ -23,8 +23,7 @@ unzip -o -q "$GEO/cb_2021_us_county_20m.zip" -d "$GEO/counties2021"
 unzip -o -q "$GEO/cb_2021_us_state_20m.zip"  -d "$GEO/states2021"
 
 echo "[3/3] 2026 provisional returns — mike10010100/elections-2026 (NYT-compiled)"
-e26="https://raw.githubusercontent.com/mike10010100/elections-2026/HEAD/site_data"
-curl -fsSL -o "$RAW/elections2026/county_shifts.json" "$e26/county_shifts.json"
-curl -fsSL -o "$RAW/elections2026/overview.json"      "$e26/overview.json"
-
+# Validates coverage and falls back to the newest good upstream commit if the
+# latest snapshot is degraded (the feed auto-updates and has regressed before).
+python3 scripts/fetch_2026.py "$RAW/elections2026" "${MIN_H26_COUNTIES:-2500}"
 echo "Done. Raw inputs in $RAW/"

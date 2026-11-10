@@ -70,7 +70,7 @@ async function load(){
 
   d3.select('#footer').html(
     `Source: <a href="https://github.com/mike10010100/elections-2026" target="_blank" rel="noopener">mike10010100/elections-2026</a>
-     (compiles NYT returns) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
+     (compiles NYT returns${srcCommit(meta)}) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
      CONUS Albers Equal Area · difference of Gaussian-smoothed per-year margins, weighted by two-party votes ·
      uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.`);
 
@@ -79,6 +79,15 @@ async function load(){
   await computeVmax();
   resize();
   window.addEventListener('resize', resize);
+}
+
+// Which upstream snapshot was used; flags a fallback when the latest was degraded.
+function srcCommit(meta){
+  const c = meta.source_commit;
+  if (!c) return '';
+  const link = `<a href="https://github.com/${c.repo}/commit/${c.sha}" target="_blank" rel="noopener">${c.sha.slice(0,7)}</a>`;
+  return c.fell_back ? `, snapshot ${link} — <b>latest upstream snapshot failed coverage checks; using last good one</b>`
+                     : `, snapshot ${link}`;
 }
 
 async function changePair(which, value){

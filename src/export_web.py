@@ -70,6 +70,7 @@ def main():
     log = json.load(open(C.DATA_PROC / "data_quality_log.json"))
     meta["fetched_at"] = log["provenance"]["fetched_at"]
     meta["provenance"] = log["provenance"]["source_2026"]
+    meta["source_commit"] = log["provenance"].get("source_commit")
 
     # subset of contested+present stations per year, and national margin
     subs = {}

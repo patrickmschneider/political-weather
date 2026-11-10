@@ -64,6 +64,7 @@ TPS_NEIGHBORS = 64               # local TPS neighbours (stability + speed)
 # newer copy in the same schema and re-run run_pipeline.py. Nothing else changes.
 SOURCE_2026 = DATA_RAW / "elections2026" / "county_shifts.json"
 SOURCE_2026_OVERVIEW = DATA_RAW / "elections2026" / "overview.json"
+SOURCE_2026_COMMIT = DATA_RAW / "elections2026" / "source_commit.json"  # from fetch_2026.py
 SOURCE_2026_PROVENANCE = (
     "mike10010100/elections-2026, site_data/county_shifts.json "
     "(compiles NYT precinct/county returns). PROVISIONAL, pre-certification."
@@ -78,6 +79,9 @@ STATE_SHP = DATA_RAW / "geo" / "states2021" / "cb_2021_us_state_20m.shp"
 # --- Data-quality thresholds ------------------------------------------------
 CONTEST_MIN_PCT = 2.0   # a county-cycle is "contested" if min(Dem%, Rep%) >= this
 EEVP_MIN = 50           # drop 2026 counties with < this % of expected vote counted
+# Abort the build if fewer CONUS counties than this carry a 2026 House margin:
+# a degraded upstream snapshot must never be smoothed into a national surface.
+MIN_2026_COUNTIES = 2500
 
 # --- Year surfaces offered in the web app's base/comparison pickers ---------
 # Each becomes one smoothed margin surface; the app differences any two.

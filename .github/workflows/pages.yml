@@ -34,6 +34,8 @@ jobs:
 
       - name: Fetch latest source data
         run: bash scripts/fetch_data.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # API rate limit for fetch_2026.py fallback search
 
       - name: Build pipeline + web data
         working-directory: src

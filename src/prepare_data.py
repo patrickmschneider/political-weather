@@ -99,10 +99,19 @@ def main():
     ov = json.load(open(C.SOURCE_2026_OVERVIEW))
     log["provenance"]["source_2026"] = C.SOURCE_2026_PROVENANCE
     log["provenance"]["fetched_at"] = ov.get("fetched_at")
+    if C.SOURCE_2026_COMMIT.exists():
+        log["provenance"]["source_commit"] = json.load(open(C.SOURCE_2026_COMMIT))
     log["provenance"]["baseline_pres"] = "tonmcg/US_County_Level_Election_Results_08-24"
     log["provenance"]["geometry"] = "US Census CB 2021 county/state 1:20m (traditional CT counties)"
 
     house = load_house(C.SOURCE_2026)
+    conus_h26 = int((house["hmargin_2026"].notna()
+                     & ~house["fips"].str[:2].isin(EXCLUDE)).sum())
+    if conus_h26 < C.MIN_2026_COUNTIES:
+        raise SystemExit(
+            f"ABORT: only {conus_h26} CONUS counties have a 2026 House margin "
+            f"(< {C.MIN_2026_COUNTIES}). The 2026 feed looks degraded; refusing to "
+            f"build a surface that would be extrapolated from a few states.")
     pres = [
         load_pres_year(C.DATA_RAW / "2024_county_pres.csv", 2024),
         load_pres_year(C.DATA_RAW / "2020_county_pres.csv", 2020),
