@@ -58,6 +58,85 @@ def load_house(src) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _tp(x):
+    if not x or x.get("d") is None or x.get("r") is None or (x["d"] + x["r"]) <= 0:
+        return None
+    return (x["d"] - x["r"]) / (x["d"] + x["r"]) * 100.0
+
+
+def one_party_states(overview) -> dict:
+    """{year: {state: {'D','R'}}} - states with a one-party / unopposed House
+    district that year, and which party it inflates. From the feed's per-district
+    flags (2026) and office_history 'op' flags (earlier cycles)."""
+    out = {}
+    for r in overview.get("house_races", []):
+        st = r["state"]
+        for yr, h in (r.get("office_history") or {}).items():
+            if h.get("op") and h.get("m") is not None:
+                out.setdefault(int(yr), {}).setdefault(st, set()).add("D" if h["m"] > 0 else "R")
+        if r.get("one_party") or r.get("uncontested"):
+            parties = {c.get("party") for c in r.get("candidates", []) if c.get("votes")}
+            for p, lab in (("DEM", "D"), ("GOP", "R")):
+                if parties and parties <= {p, "IND", "NPP", "OTH", None} and p in parties:
+                    out.setdefault(2026, {}).setdefault(st, set()).add(lab)
+            if "DEM" in parties and "GOP" not in parties:
+                out.setdefault(2026, {}).setdefault(st, set()).add("D")
+            if "GOP" in parties and "DEM" not in parties:
+                out.setdefault(2026, {}).setdefault(st, set()).add("R")
+    return out
+
+
+# Same-ballot statewide comparators per House year (first contested one wins).
+_STATEWIDE = {2014: ["s14", "g14"], 2016: ["p16", "s16", "g16"], 2018: ["s18", "g18"],
+              2020: ["p20", "s20", "g20"], 2022: ["s22", "g22"], 2024: ["p24", "s24", "g24"],
+              2026: ["g26", "s26"]}
+
+
+def contaminated_house(src, overview, years) -> dict:
+    """{(fips, year): True} for county House results distorted by a same-party
+    district (see config.ONE_PARTY_RESID_PTS)."""
+    cs = json.load(open(src))["counties"]
+    ops = one_party_states(overview)
+    bad, log = {}, {}
+    for yr in years:
+        key = "h" + str(yr)[2:]
+        resid = {}
+        for fips, c in cs.items():
+            hm = _tp(c.get(key))
+            if hm is None:
+                continue
+            for k in _STATEWIDE.get(yr, []):
+                x = c.get(k)
+                if x and not x.get("op") and _tp(x) is not None and min(x["d"], x["r"]) >= C.CONTEST_MIN_PCT:
+                    resid[str(fips).zfill(5)] = (c.get("state"), hm - _tp(x))
+                    break
+        if not resid:
+            continue
+        # Baseline per state absorbs statewide candidate effects (a popular
+        # governor shifts every county). Where a state HAS a one-party district,
+        # contamination only pushes one way, so use the opposite quartile.
+        by_st = {}
+        for st, r in resid.values():
+            by_st.setdefault(st, []).append(r)
+        st_ops = ops.get(yr, {})
+        base = {}
+        for st, rs in by_st.items():
+            p = st_ops.get(st, set())
+            q = 0.25 if p == {"D"} else 0.75 if p == {"R"} else 0.5
+            base[st] = float(np.quantile(rs, q))
+        clean = [abs(r - base[st]) for st, r in resid.values() if st not in st_ops]
+        thr = max(C.ONE_PARTY_RESID_PTS, float(np.quantile(clean, C.ONE_PARTY_RESID_Q))) if clean else C.ONE_PARTY_RESID_PTS
+        n = 0
+        for fips, (st, r) in resid.items():
+            parties = st_ops.get(st, set())
+            d = r - base[st]
+            if ("D" in parties and d > thr) or ("R" in parties and d < -thr):
+                bad[(fips, yr)] = True
+                n += 1
+        log[yr] = {"excluded": n, "cutoff_pts": round(thr, 1)}
+    return bad, log
+
+
 def _pres_cols(df, fips_col, dem_col, gop_col, year) -> pd.DataFrame:
     fips = (df[fips_col].astype(str).str.split(".").str[0].str.zfill(5))
     out = pd.DataFrame({"fips": fips})
@@ -105,6 +184,12 @@ def main():
     log["provenance"]["geometry"] = "US Census CB 2021 county/state 1:20m (traditional CT counties)"
 
     house = load_house(C.SOURCE_2026)
+    bad, badlog = contaminated_house(C.SOURCE_2026, ov, C.OFFER_HOUSE_YEARS)
+    for yr in C.OFFER_HOUSE_YEARS:
+        hit = house["fips"].map(lambda f: (f, yr) in bad)
+        house[f"hcontested_{yr}"] &= ~hit
+    log["data_quality"]["one_party_contaminated_counties"] = {str(k): v for k, v in badlog.items()}
+    print("Counties excluded for same-party-district contamination:", badlog)
     conus_h26 = int((house["hmargin_2026"].notna()
                      & ~house["fips"].str[:2].isin(EXCLUDE)).sum())
     if conus_h26 < C.MIN_2026_COUNTIES:

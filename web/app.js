@@ -1,12 +1,14 @@
-/* Political Weather — interactive 2026 House swing contour map.
-   Per-YEAR Gaussian-smoothed margin surfaces (projected EPSG:5070 metres) are
-   differenced in-browser: swing = margin(comparison) - margin(base), for any two
-   years the viewer picks. d3-contour builds the bands; d3.zoom pans/zooms; two
-   levels of detail (75 km / 40 km) are revealed as you zoom. */
+/* Political Weather — interactive U.S. election contour maps.
+   Surfaces are computed in the browser from county results: each county's
+   votes are placed at its census tracts' population centres (cells_*.json),
+   small counties are shrunk toward their regional mean, and the grid is
+   Gaussian-smoothed (vote-weighted Nadaraya-Watson) on a projected EPSG:5070
+   grid. Swing uses only counties contested in BOTH years. d3-contour builds
+   the bands; two levels of detail (75 km / 40 km) are revealed as you zoom. */
 'use strict';
 
 const DATA = 'data/';
-const state = { meta:null, grids:{}, states:null, land:null, counties:null, capitals:null, majors:null, towns:[], stateLabels:[], showStates:true,
+const state = { meta:null, cells:{}, states:null, land:null, counties:null, capitals:null, majors:null, towns:[], stateLabels:[], showStates:true,
                 landmask:null, base:null, cmp:null, mode:'abs', lod:null, loading:{},
                 showCaps:true, showMajors:true, vmaxAbs:10, vmaxDev:10, natl:0 };
 
@@ -25,12 +27,14 @@ function metrePath(){ return d3.geoPath(d3.geoTransform({ point(X,Y){ this.strea
 function gridPath(l){ return d3.geoPath(d3.geoTransform({ point(i,j){ this.stream.point(sx(l.x0 + i*l.dx), sy(l.y0 + j*l.dy)); } })); }
 function pickLOD(k){ let L = state.meta.lods[0]; for (const l of state.meta.lods) if (k >= l.zmin) L = l; return L; }
 
-function ensureGrid(key, lodName){
-  state.grids[key] = state.grids[key] || {};
-  if (state.grids[key][lodName]) return Promise.resolve(state.grids[key][lodName]);
-  const id = `${key}_${lodName}`;
-  if (!state.loading[id]) state.loading[id] = d3.json(`${DATA}margin_${id}.json`)
-      .then(d => { state.grids[key][lodName] = d.z; return d.z; });
+// County -> grid-cell population placement for one LOD (loaded on demand).
+function ensureCells(lod){
+  if (state.cells[lod.name]) return Promise.resolve(state.cells[lod.name]);
+  const id = 'cells_' + lod.name;
+  if (!state.loading[id]) state.loading[id] = d3.json(`${DATA}${id}.json`).then(d => {
+    state.cells[lod.name] = { off: Int32Array.from(d.off), i: Int32Array.from(d.i), f: Float64Array.from(d.f) };
+    return state.cells[lod.name];
+  });
   return state.loading[id];
 }
 
@@ -75,14 +79,15 @@ async function load(){
   d3.select('#footer').html(
     `Source: <a href="https://github.com/mike10010100/elections-2026" target="_blank" rel="noopener">mike10010100/elections-2026</a>
      (compiles NYT returns${srcCommit(meta)}) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
-     CONUS Albers Equal Area · swing = Gaussian-smoothed county swing over counties contested in <b>both</b> years, weighted by two-party votes ·
-     uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.
+     CONUS Albers Equal Area · each county's votes placed at its census tracts' population centres (Census 2020), small counties shrunk toward
+     their regional mean, then Gaussian-smoothed and weighted by two-party votes · swing uses only counties with a genuine two-party
+     House race in <b>both</b> years (uncontested and same-party top-two districts excluded). County-level House swing is noisy: read regional tendency, not local values.
      Place names: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0).
      Alaska: at-large RCV result pending. Hawai&#699;i: see the static maps in the repo.`);
 
+  await ensureCells(state.meta.lods[0]);
   computePairStats();
-  await Promise.all([ensureGrid(state.base, state.lod.name), ensureGrid(state.cmp, state.lod.name)]);
-  await computeVmax();
+  computeVmax();
   resize();
   // Re-fit whenever the map box changes size: window resizes, rotation, and the
   // shared site header arriving after first paint (it shrinks the map area).
@@ -101,80 +106,116 @@ function srcCommit(meta){
 async function changePair(which, value){
   state[which] = value;
   computePairStats();
-  await Promise.all([ensureGrid(state.base, state.lod.name), ensureGrid(state.cmp, state.lod.name)]);
-  await computeVmax();
+  computeVmax();
   render();
 }
 
-// Counties usable for the current pair: a contested result in BOTH years.
-// Weighted by focus-year two-party votes (as in the static pipeline).
-function pairStations(){
-  const b = state.base, c = state.cmp, out = [];
-  for (const k of state.counties){
-    const mb = k.m[b], mc = k.m[c], w = k.w[c];
-    if (mb != null && mc != null && w > 0) out.push({ x: k.x, y: k.y, v: mc - mb, w });
+// Per-county inputs for a surface: value + weight, or null where unusable.
+//  margin: the focus year's contested counties, weighted by its two-party votes
+//  swing:  counties contested in BOTH years, value = margin change, weighted by
+//          focus-year two-party votes (as in the static pipeline)
+function countyInputs(kind){
+  const b = state.base, c = state.cmp, n = state.counties.length;
+  const v = new Float64Array(n), w = new Float64Array(n);
+  for (let k = 0; k < n; k++){
+    const K = state.counties[k], mc = K.m[c], wc = K.w[c];
+    if (mc == null || !(wc > 0)) continue;
+    if (kind === 'margin'){ v[k] = mc; w[k] = wc; continue; }
+    const mb = K.m[b];
+    if (mb == null) continue;
+    v[k] = mc - mb; w[k] = wc;
   }
-  return out;
+  return { v, w };
 }
 
 // National swing = vote-weighted mean county swing over the matched set, so
 // "Deviation" is measured against the same counties the surface uses.
 function computePairStats(){
-  const P = pairStations();
-  let sw = 0, sv = 0;
-  for (const p of P){ sw += p.w; sv += p.w * p.v; }
+  const { v, w } = countyInputs('swing');
+  let sw = 0, sv = 0, n = 0;
+  for (let k = 0; k < v.length; k++) if (w[k] > 0){ sw += w[k]; sv += w[k] * v[k]; n++; }
   state.natl = sw > 0 ? +(sv / sw).toFixed(2) : 0;
-  state.nPair = P.length;
+  state.nPair = n;
 }
 
-// Gaussian-smoothed swing surface for the current pair on one LOD's grid.
-// Same estimator as interpolate.gaussian_surface (vote-weighted Nadaraya-Watson,
-// sigma = LOD bandwidth), with the kernel truncated at 6 sigma (weight < 2e-8).
-const swingCache = {};
-function swingGrid(lod){
-  const key = `${state.base}|${state.cmp}|${lod.name}`;
-  if (swingCache[key]) return swingCache[key];
-  const P = pairStations(), nx = lod.nx, ny = lod.ny, n = nx * ny;
-  const num = new Float64Array(n), den = new Float64Array(n);
-  const sig = lod.bw_km * 1000, h2 = 2 * sig * sig, R = 6 * sig;
-  const ri = Math.ceil(R / lod.dx), rj = Math.ceil(R / lod.dy);
-  const ex = new Float64Array(2 * ri + 1), ey = new Float64Array(2 * rj + 1);
-  for (const p of P){
-    const ci = Math.round((p.x - lod.x0) / lod.dx), cj = Math.round((p.y - lod.y0) / lod.dy);
-    const i0 = Math.max(0, ci - ri), i1 = Math.min(nx - 1, ci + ri);
-    const j0 = Math.max(0, cj - rj), j1 = Math.min(ny - 1, cj + rj);
-    for (let i = i0; i <= i1; i++){ const d = lod.x0 + i * lod.dx - p.x; ex[i - i0] = Math.exp(-d * d / h2); }
-    for (let j = j0; j <= j1; j++){ const d = lod.y0 + j * lod.dy - p.y; ey[j - j0] = Math.exp(-d * d / h2); }
-    const wv = p.w * p.v;
-    for (let j = j0; j <= j1; j++){
-      const kj = ey[j - j0], row = j * nx;
-      if (kj < 1e-12) continue;
-      for (let i = i0; i <= i1; i++){
-        const k = kj * ex[i - i0];
-        num[row + i] += k * wv; den[row + i] += k * p.w;
-      }
+// Separable Gaussian blur of a grid (sigma in cells, truncated at 5 sigma).
+function blur(src, nx, ny, sig){
+  const r = Math.ceil(5 * sig), k = new Float64Array(2 * r + 1);
+  for (let t = -r; t <= r; t++) k[t + r] = Math.exp(-t * t / (2 * sig * sig));
+  const tmp = new Float64Array(nx * ny), out = new Float64Array(nx * ny);
+  for (let j = 0; j < ny; j++){
+    const row = j * nx;
+    for (let i = 0; i < nx; i++){
+      const a = src[row + i]; if (a === 0) continue;
+      const i0 = Math.max(0, i - r), i1 = Math.min(nx - 1, i + r);
+      for (let q = i0; q <= i1; q++) tmp[row + q] += a * k[q - i + r];
     }
   }
-  // Cells beyond reach of every station (offshore, clipped anyway) get the
-  // national swing — neutral in the Deviation view.
-  const Z = new Array(n);
-  for (let i = 0; i < n; i++) Z[i] = den[i] > 0 ? num[i] / den[i] : state.natl;
-  return (swingCache[key] = Z);
+  for (let j = 0; j < ny; j++){
+    const j0 = Math.max(0, j - r), j1 = Math.min(ny - 1, j + r);
+    for (let i = 0; i < nx; i++){
+      const a = tmp[j * nx + i]; if (a === 0) continue;
+      for (let q = j0; q <= j1; q++) out[q * nx + i] += a * k[q - j + r];
+    }
+  }
+  return out;
 }
 
-// Colour-scale domains from the coarse smoothed surface, over LAND cells only
-// (offshore extrapolation would otherwise inflate the scale). Matches the static
-// maps' saturation and stays stable as you zoom between LODs.
-async function computeVmax(){
-  const lod0 = state.meta.lods[0].name;
-  const gc = await ensureGrid(state.cmp, lod0);
-  const sg = swingGrid(state.meta.lods[0]);
-  const mask = state.landmask.mask;
+// Deposit county values at their population cells and smooth:
+// Z = blur(sum w*f*v) / blur(sum w*f). Returns { Z, den }.
+function smooth(v, w, lod, sigM){
+  const C = state.cells[lod.name], n = lod.nx * lod.ny;
+  const num = new Float64Array(n), den = new Float64Array(n);
+  for (let k = 0; k < v.length; k++){
+    if (!(w[k] > 0)) continue;
+    for (let e = C.off[k]; e < C.off[k + 1]; e++){
+      const a = w[k] * C.f[e]; num[C.i[e]] += a * v[k]; den[C.i[e]] += a;
+    }
+  }
+  const N = blur(num, lod.nx, lod.ny, sigM / lod.dx), D = blur(den, lod.nx, lod.ny, sigM / lod.dx);
+  const Z = new Float64Array(n);
+  for (let i = 0; i < n; i++) Z[i] = D[i] > 1e-9 ? N[i] / D[i] : NaN;
+  return Z;
+}
+
+// Small-county shrinkage toward the regional (wide-bandwidth) mean, so a lone
+// low-vote county can't paint a whole region: v' = (w v + K r) / (w + K).
+function shrink(v, w){
+  const sm = state.meta.smoothing, K = sm.shrink_k_votes, lod0 = state.meta.lods[0];
+  const R = smooth(v, w, lod0, sm.shrink_bw_km * 1000), C = state.cells[lod0.name];
+  const out = Float64Array.from(v);
+  for (let k = 0; k < v.length; k++){
+    if (!(w[k] > 0)) continue;
+    let r = 0, fs = 0;
+    for (let e = C.off[k]; e < C.off[k + 1]; e++){ const z = R[C.i[e]]; if (z === z){ r += C.f[e] * z; fs += C.f[e]; } }
+    if (fs > 0) out[k] = (w[k] * v[k] + K * (r / fs)) / (w[k] + K);
+  }
+  return out;
+}
+
+const fieldCache = {};
+function surface(kind, lod){
+  const key = `${kind}|${kind === 'margin' ? '' : state.base}|${state.cmp}|${lod.name}`;
+  if (fieldCache[key]) return fieldCache[key];
+  const { v, w } = countyInputs(kind);
+  const Z = smooth(shrink(v, w), w, lod, lod.bw_km * 1000);
+  // Cells beyond reach of every county (offshore; clipped anyway) get a
+  // neutral value: national margin, or national swing.
+  const fill = kind === 'margin' ? state.meta.years[state.cmp].national : state.natl;
+  const out = new Array(Z.length);
+  for (let i = 0; i < Z.length; i++) out[i] = Z[i] === Z[i] ? Z[i] : fill;
+  return (fieldCache[key] = out);
+}
+
+// Colour-scale domains from the coarse surface, over LAND cells only
+// (offshore extrapolation would otherwise inflate the scale); stable across zoom.
+function computeVmax(){
+  const lod0 = state.meta.lods[0], mask = state.landmask.mask;
+  const gm = surface('margin', lod0), gs = surface('swing', lod0);
   const abs = [], dev = [], mar = [];
-  for (let i = 0; i < gc.length; i++){
+  for (let i = 0; i < gs.length; i++){
     if (mask[i] !== '1') continue;
-    const s = sg[i];
-    abs.push(Math.abs(s)); dev.push(Math.abs(s - state.natl)); mar.push(Math.abs(gc[i]));
+    abs.push(Math.abs(gs[i])); dev.push(Math.abs(gs[i] - state.natl)); mar.push(Math.abs(gm[i]));
   }
   const pct = (a, q) => { a.sort((x, y) => x - y); return a.length ? a[Math.floor(q * (a.length - 1))] : 10; };
   state.vmaxAbs = Math.max(2, Math.ceil(pct(abs, 0.98)));
@@ -183,12 +224,11 @@ async function computeVmax(){
 }
 
 function field(){
-  const gc = state.grids[state.cmp][state.lod.name];
   const cl = state.meta.years[state.cmp].label;
   if (state.mode === 'margin')
-    return { F: gc, vmax: state.vmaxMargin, title: `Margin (pts) · ${cl}` };
+    return { F: surface('margin', state.lod), vmax: state.vmaxMargin, title: `Margin (pts) · ${cl}` };
   const bl = state.meta.years[state.base].label;
-  const swing = swingGrid(state.lod);
+  const swing = surface('swing', state.lod);
   if (state.mode === 'abs')
     return { F: swing, vmax: state.vmaxAbs, title: `Swing (pts) · ${bl} → ${cl}` };
   return { F: swing.map(v => v - state.natl), vmax: state.vmaxDev,
@@ -196,8 +236,7 @@ function field(){
 }
 
 function render(){
-  if (!MPATH || !state.grids[state.cmp] || !state.grids[state.cmp][state.lod.name]) return;
-  if (state.mode !== 'margin' && (!state.grids[state.base] || !state.grids[state.base][state.lod.name])) return;
+  if (!MPATH || !state.cells[state.lod.name]) return;
   const { F, vmax, title } = field();
   const color = colorScale(vmax);
   const step = vmax > 20 ? 3 : (vmax > 8 ? 2 : 1);
@@ -304,7 +343,7 @@ const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', async e => {
   const want = pickLOD(e.transform.k);
   if (want !== state.lod){
     state.lod = want;
-    await Promise.all([ensureGrid(state.base, want.name), ensureGrid(state.cmp, want.name)]);
+    await ensureCells(want);
     render();
   }
 });

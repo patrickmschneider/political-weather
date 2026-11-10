@@ -38,6 +38,16 @@ GRID_RES_M = 15_000  # 15 km grid cell -> crisp isolines for the 75 km kernel
 
 # Web level-of-detail: coarser surface when zoomed out, finer revealed on zoom.
 # (name, gaussian bandwidth m, grid resolution m, min zoom scale to show)
+# --- Web app smoothing (computed in the browser) ---------------------------
+# Each county's votes are spread over its 2020 census tracts' population
+# centres (Census CenPop2020), so the surface sits where people live rather
+# than at a county's geometric centre (big, empty Western counties).
+TRACT_CENPOP = DATA_RAW / "cenpop" / "CenPop2020_Mean_TR.txt"
+# Small-county shrinkage: a county's value is pulled toward its regional
+# (wide-bandwidth) mean as v' = (w*v + K*r)/(w + K), w = two-party votes.
+# A 2,000-vote county keeps ~2/7 of its own value; 100k+ vote counties ~all.
+SHRINK_K_VOTES = 5000
+SHRINK_BW_M = 150_000
 WEB_LODS = [
     ("coarse", 75_000, 18_000, 0.0),
     ("fine",   40_000, 11_000, 3.0),
@@ -82,6 +92,16 @@ EEVP_MIN = 50           # drop 2026 counties with < this % of expected vote coun
 # Abort the build if fewer CONUS counties than this carry a 2026 House margin:
 # a degraded upstream snapshot must never be smoothed into a national surface.
 MIN_2026_COUNTIES = 2500
+# Same-party districts (CA/WA top-two D-vs-D or R-vs-R, unopposed seats) are
+# summed into county House totals by the feed, inflating one party in every
+# county they touch. In a state with such a district that year, a county is
+# excluded when its House margin sits more than this many points beyond the
+# same-ballot statewide race (Pres/Sen/Gov), in that party's direction,
+# relative to that state's typical House-minus-statewide gap. The cutoff adapts
+# per year: the 98th percentile of that gap in states WITHOUT such districts
+# (ticket-splitting years like 2016 are much noisier), floored at this value.
+ONE_PARTY_RESID_PTS = 12.0
+ONE_PARTY_RESID_Q = 0.98
 
 # --- Year surfaces offered in the web app's base/comparison pickers ---------
 # Each becomes one smoothed margin surface; the app differences any two.

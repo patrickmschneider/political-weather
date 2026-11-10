@@ -22,6 +22,10 @@ rm -rf "$GEO/counties2021" "$GEO/states2021"
 unzip -o -q "$GEO/cb_2021_us_county_20m.zip" -d "$GEO/counties2021"
 unzip -o -q "$GEO/cb_2021_us_state_20m.zip"  -d "$GEO/states2021"
 
+echo "[2b] Census 2020 tract population centres (places county votes where people live)"
+mkdir -p "$RAW/cenpop"
+curl -fsSL -o "$RAW/cenpop/CenPop2020_Mean_TR.txt" "https://www2.census.gov/geo/docs/reference/cenpop2020/tract/CenPop2020_Mean_TR.txt"
+
 echo "[3/4] Place names for zoom-in labels — GeoNames cities15000 (CC BY 4.0)"
 mkdir -p "$RAW/geonames"
 curl -fsSL -o "$RAW/geonames/cities15000.zip" "https://download.geonames.org/export/dump/cities15000.zip"

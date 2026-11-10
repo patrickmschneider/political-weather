@@ -84,17 +84,47 @@ def main():
         natl = float(np.average(sub[mcol], weights=sub[wcol]))
         meta["years"][key] = {"label": label, "type": typ, "national": round(natl, 2)}
 
-    # per-LOD, per-year margin grids (full rectangle; app clips to land)
+    meta["smoothing"] = {"shrink_k_votes": C.SHRINK_K_VOTES, "shrink_bw_km": C.SHRINK_BW_M / 1000,
+                         "truncate_sigma": 5}
+
+    # Population placement: each county (in counties.json order) -> the grid
+    # cells holding its census tracts' population centres, with population
+    # fractions. The browser deposits a county's votes into those cells and
+    # Gaussian-blurs the grid (vote-weighted Nadaraya-Watson, as before).
+    tr = pd.read_csv(C.TRACT_CENPOP, dtype={"STATEFP": str, "COUNTYFP": str}, encoding="utf-8-sig")
+    tr["fips"] = tr["STATEFP"] + tr["COUNTYFP"]
+    tr = tr[tr["POPULATION"] > 0]
+    tp = gpd.GeoSeries(gpd.points_from_xy(tr["LONGITUDE"], tr["LATITUDE"]),
+                       crs=C.CRS_GEOGRAPHIC).to_crs(C.CRS_WORKING)
+    tr["X"], tr["Y"] = tp.x.values, tp.y.values
+    by_fips = {f: g for f, g in tr.groupby("fips")}
+    no_tracts = 0
     for name, bw, res, zmin in C.WEB_LODS:
         GX, GY, (x0, y0) = _grid(land, res)
         nx, ny = GX.shape[1], GX.shape[0]
         meta["lods"].append({"name": name, "bw_km": bw / 1000, "zmin": zmin,
                              "x0": x0, "y0": y0, "dx": res, "dy": res, "nx": nx, "ny": ny})
-        allin = np.ones(GX.shape, bool)
-        for key, (sub, mcol, wcol) in subs.items():
-            Z = I.gaussian_surface(sub, mcol, GX, GY, allin, bandwidth=bw, weight_col=wcol)
-            json.dump({"z": np.round(Z, 2).ravel(order="C").tolist()},
-                      open(WEB_DATA / f"margin_{key}_{name}.json", "w"))
+        off, idx, frac = [0], [], []
+        for _, r in stations.iterrows():
+            g = by_fips.get(r["fips"])
+            if g is None or g["POPULATION"].sum() <= 0:
+                xs, ys, ps = np.array([r["x"]]), np.array([r["y"]]), np.array([1.0])
+                no_tracts += 1
+            else:
+                xs, ys, ps = g["X"].to_numpy(), g["Y"].to_numpy(), g["POPULATION"].to_numpy(float)
+            ci = np.clip(np.rint((xs - x0) / res).astype(int), 0, nx - 1)
+            cj = np.clip(np.rint((ys - y0) / res).astype(int), 0, ny - 1)
+            cell = cj * nx + ci
+            agg = pd.Series(ps).groupby(cell).sum()
+            agg = agg / agg.sum()
+            idx += agg.index.astype(int).tolist()
+            frac += np.round(agg.to_numpy(), 4).tolist()
+            off.append(len(idx))
+        json.dump({"off": off, "i": idx, "f": frac}, open(WEB_DATA / f"cells_{name}.json", "w"))
+        print(f"cells_{name}: {len(idx)} county-cell entries")
+    print(f"Counties without tracts (placed at their own point): {no_tracts // len(C.WEB_LODS)}")
+    for f in WEB_DATA.glob("margin_*_*.json"):   # superseded by in-browser smoothing
+        f.unlink()
 
     # land mask for the coarse grid: lets the app set the colour-scale domain
     # over land only (offshore extrapolated cells would otherwise inflate it).
