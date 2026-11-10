@@ -75,7 +75,7 @@ async function load(){
   d3.select('#footer').html(
     `Source: <a href="https://github.com/mike10010100/elections-2026" target="_blank" rel="noopener">mike10010100/elections-2026</a>
      (compiles NYT returns${srcCommit(meta)}) · <b>PROVISIONAL, pre-certification</b> · fetched ${meta.fetched_at.slice(0,16)} ·
-     CONUS Albers Equal Area · difference of Gaussian-smoothed per-year margins, weighted by two-party votes ·
+     CONUS Albers Equal Area · swing = Gaussian-smoothed county swing over counties contested in <b>both</b> years, weighted by two-party votes ·
      uncontested seats excluded. County-level House swing is noisy: read regional tendency, not local values.
      Place names: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0).
      Alaska: at-large RCV result pending. Hawai&#699;i: see the static maps in the repo.`);
@@ -106,8 +106,60 @@ async function changePair(which, value){
   render();
 }
 
+// Counties usable for the current pair: a contested result in BOTH years.
+// Weighted by focus-year two-party votes (as in the static pipeline).
+function pairStations(){
+  const b = state.base, c = state.cmp, out = [];
+  for (const k of state.counties){
+    const mb = k.m[b], mc = k.m[c], w = k.w[c];
+    if (mb != null && mc != null && w > 0) out.push({ x: k.x, y: k.y, v: mc - mb, w });
+  }
+  return out;
+}
+
+// National swing = vote-weighted mean county swing over the matched set, so
+// "Deviation" is measured against the same counties the surface uses.
 function computePairStats(){
-  state.natl = +(state.meta.years[state.cmp].national - state.meta.years[state.base].national).toFixed(2);
+  const P = pairStations();
+  let sw = 0, sv = 0;
+  for (const p of P){ sw += p.w; sv += p.w * p.v; }
+  state.natl = sw > 0 ? +(sv / sw).toFixed(2) : 0;
+  state.nPair = P.length;
+}
+
+// Gaussian-smoothed swing surface for the current pair on one LOD's grid.
+// Same estimator as interpolate.gaussian_surface (vote-weighted Nadaraya-Watson,
+// sigma = LOD bandwidth), with the kernel truncated at 6 sigma (weight < 2e-8).
+const swingCache = {};
+function swingGrid(lod){
+  const key = `${state.base}|${state.cmp}|${lod.name}`;
+  if (swingCache[key]) return swingCache[key];
+  const P = pairStations(), nx = lod.nx, ny = lod.ny, n = nx * ny;
+  const num = new Float64Array(n), den = new Float64Array(n);
+  const sig = lod.bw_km * 1000, h2 = 2 * sig * sig, R = 6 * sig;
+  const ri = Math.ceil(R / lod.dx), rj = Math.ceil(R / lod.dy);
+  const ex = new Float64Array(2 * ri + 1), ey = new Float64Array(2 * rj + 1);
+  for (const p of P){
+    const ci = Math.round((p.x - lod.x0) / lod.dx), cj = Math.round((p.y - lod.y0) / lod.dy);
+    const i0 = Math.max(0, ci - ri), i1 = Math.min(nx - 1, ci + ri);
+    const j0 = Math.max(0, cj - rj), j1 = Math.min(ny - 1, cj + rj);
+    for (let i = i0; i <= i1; i++){ const d = lod.x0 + i * lod.dx - p.x; ex[i - i0] = Math.exp(-d * d / h2); }
+    for (let j = j0; j <= j1; j++){ const d = lod.y0 + j * lod.dy - p.y; ey[j - j0] = Math.exp(-d * d / h2); }
+    const wv = p.w * p.v;
+    for (let j = j0; j <= j1; j++){
+      const kj = ey[j - j0], row = j * nx;
+      if (kj < 1e-12) continue;
+      for (let i = i0; i <= i1; i++){
+        const k = kj * ex[i - i0];
+        num[row + i] += k * wv; den[row + i] += k * p.w;
+      }
+    }
+  }
+  // Cells beyond reach of every station (offshore, clipped anyway) get the
+  // national swing — neutral in the Deviation view.
+  const Z = new Array(n);
+  for (let i = 0; i < n; i++) Z[i] = den[i] > 0 ? num[i] / den[i] : state.natl;
+  return (swingCache[key] = Z);
 }
 
 // Colour-scale domains from the coarse smoothed surface, over LAND cells only
@@ -115,12 +167,13 @@ function computePairStats(){
 // maps' saturation and stays stable as you zoom between LODs.
 async function computeVmax(){
   const lod0 = state.meta.lods[0].name;
-  const [gb, gc] = await Promise.all([ensureGrid(state.base, lod0), ensureGrid(state.cmp, lod0)]);
+  const gc = await ensureGrid(state.cmp, lod0);
+  const sg = swingGrid(state.meta.lods[0]);
   const mask = state.landmask.mask;
   const abs = [], dev = [], mar = [];
   for (let i = 0; i < gc.length; i++){
     if (mask[i] !== '1') continue;
-    const s = gc[i] - gb[i];
+    const s = sg[i];
     abs.push(Math.abs(s)); dev.push(Math.abs(s - state.natl)); mar.push(Math.abs(gc[i]));
   }
   const pct = (a, q) => { a.sort((x, y) => x - y); return a.length ? a[Math.floor(q * (a.length - 1))] : 10; };
@@ -134,9 +187,8 @@ function field(){
   const cl = state.meta.years[state.cmp].label;
   if (state.mode === 'margin')
     return { F: gc, vmax: state.vmaxMargin, title: `Margin (pts) · ${cl}` };
-  const gb = state.grids[state.base][state.lod.name];
   const bl = state.meta.years[state.base].label;
-  const swing = gc.map((v, i) => v - gb[i]);
+  const swing = swingGrid(state.lod);
   if (state.mode === 'abs')
     return { F: swing, vmax: state.vmaxAbs, title: `Swing (pts) · ${bl} → ${cl}` };
   return { F: swing.map(v => v - state.natl), vmax: state.vmaxDev,
@@ -260,6 +312,15 @@ svg.call(zoom)
    .on('mousemove', onMove).on('click', onMove).on('mouseleave', () => tip.style('opacity', 0))
    .on('mousedown', () => svg.classed('grabbing', true)).on('mouseup', () => svg.classed('grabbing', false));
 
+// Keep the tooltip inside the map (matters on narrow screens).
+function placeTip(px, py){
+  const W = svg.node().clientWidth, H = svg.node().clientHeight, tn = tip.node();
+  const tw = tn.offsetWidth, th = tn.offsetHeight;
+  const left = px + 14 + tw > W ? Math.max(4, px - 14 - tw) : px + 14;
+  const top = py + 10 + th > H ? Math.max(4, py - 10 - th) : py + 10;
+  tip.style('left', left + 'px').style('top', top + 'px');
+}
+
 function onMove(e){
   const t = d3.zoomTransform(svg.node());
   const [px, py] = d3.pointer(e, svg.node());
@@ -270,17 +331,19 @@ function onMove(e){
   const mc = best.m[state.cmp];
   let val;
   if (state.mode === 'margin'){ if (mc == null){ tip.style('opacity', 0); return; } val = mc; }
-  else { const mb = best.m[state.base]; if (mb == null || mc == null){ tip.style('opacity', 0); return; }
+  else { const mb = best.m[state.base];
+         if (mb == null || mc == null){
+           // Say why there's no swing here instead of silently hiding it.
+           const miss = [mb == null ? state.base : null, mc == null ? state.cmp : null].filter(Boolean)
+               .map(k => state.meta.years[k].label).join(' or ');
+           tip.style('opacity', 1).html(`<b>${best.n}</b>, ${best.s}<br><span style="color:#6b6b6b">No contested race in ${miss} — not used for swing</span>`);
+           placeTip(px, py); return;
+         }
          val = state.mode === 'dev' ? (mc - mb - state.natl) : (mc - mb); }
   tip.style('opacity', 1)
      .html(`<b>${best.n}</b>, ${best.s}<br><span class="v" style="color:${val>=0?'#2166ac':'#b2182b'}">`
            + `${val>=0?'+':''}${val.toFixed(1)} pts ${val>=0?'D':'R'}</span>`);
-  // keep the tooltip inside the map (matters on narrow screens)
-  const W = svg.node().clientWidth, H = svg.node().clientHeight, tn = tip.node();
-  const tw = tn.offsetWidth, th = tn.offsetHeight;
-  const left = px + 14 + tw > W ? Math.max(4, px - 14 - tw) : px + 14;
-  const top = py + 10 + th > H ? Math.max(4, py - 10 - th) : py + 10;
-  tip.style('left', left + 'px').style('top', top + 'px');
+  placeTip(px, py);
 }
 
 let lastW = 0, lastH = 0;

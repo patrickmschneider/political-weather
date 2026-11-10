@@ -120,14 +120,18 @@ def main():
     json.dump(slabels, open(WEB_DATA / "state_labels.json", "w"))
     json.dump(_fc(land), open(WEB_DATA / "land.json", "w"))
 
-    # county per-year margins (null where uncontested/missing) for tooltips + scale
+    # County per-year margins (null where uncontested/missing) and two-party
+    # votes. The app smooths SWING from these directly, over only the counties
+    # valid in BOTH years of a pair — differencing two per-year surfaces built
+    # on different county sets invents swings where one year is uncontested.
     cj = []
     for _, r in stations.iterrows():
-        m = {}
+        m, w = {}, {}
         for key, label, typ, mcol, wcol, ccol in specs:
-            ok = pd.notna(r[mcol]) and (not ccol or bool(r[ccol]))
-            m[key] = None if not ok else round(float(r[mcol]), 1)
-        cj.append({"x": round(r["x"]), "y": round(r["y"]), "n": r["name"], "s": r["state"], "m": m})
+            ok = pd.notna(r[mcol]) and pd.notna(r[wcol]) and (not ccol or bool(r[ccol]))
+            m[key] = None if not ok else round(float(r[mcol]), 2)
+            w[key] = None if not ok else int(round(float(r[wcol])))
+        cj.append({"x": round(r["x"]), "y": round(r["y"]), "n": r["name"], "s": r["state"], "m": m, "w": w})
     json.dump(cj, open(WEB_DATA / "counties.json", "w"))
 
     # capitals + majors
