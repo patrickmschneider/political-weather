@@ -31,6 +31,15 @@
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
   .seg button{border:0;border-radius:0;padding:6px 12px;background:#fff}
   .seg button.active{background:#2b2b2b;color:#fff}
+  .ctl{position:relative}
+  .info{font-size:10px;font-weight:700;width:16px;height:16px;padding:0;margin-left:3px;border-radius:50%;
+    line-height:14px;vertical-align:1px;color:var(--muted);text-transform:none}
+  .info[aria-expanded="true"]{background:#2b2b2b;color:#fff;border-color:#2b2b2b}
+  .popnote{display:none;position:absolute;top:100%;left:0;margin-top:6px;z-index:20;width:320px;max-width:calc(100vw - 32px);
+    background:#fff;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.5;
+    color:var(--ink);box-shadow:0 2px 10px #0002}
+  .popnote.open{display:block}
+  .popnote p{margin:0 0 6px} .popnote p:last-child{margin:0}
   #legend{display:flex;flex-direction:column;gap:2px}
   .legend-title{font-size:11px;color:var(--muted)}
   #wrap{position:relative;width:100%;flex:1 1 auto;min-height:0}
@@ -93,18 +102,35 @@
   <h1>Political <span class="pun">Weather</span> <span class="badge">PROVISIONAL</span></h1>
   <div class="sub">U.S. elections drawn like weather charts: isolines connect counties of equal value.
     <span class="long">Pick any two elections (House 2014–2026, President 2008–2024) to map the <b>swing</b> between them or
-    each county's <b>deviation</b> from the national swing — or show a single year's Dem–Rep <b>margin</b>.</span>
+    each county's <b>deviation</b> from the national swing — or show a single year's <b>level</b> — measured either as
+    vote <b>share</b> (how an area votes) or <b>net votes</b> (how much it contributes to the popular vote).</span>
     <span class="long">Drag to pan, scroll to zoom, hover for county detail.</span>
     <span class="short">Pinch to zoom, tap for county detail.</span></div>
 </header>
 
 <div class="controls">
   <div class="ctl ctl-view">
+    <label>Measure</label>
+    <div class="seg" id="measure">
+      <button data-v="share" class="active" title="Dem−Rep two-party margin, in points: how an area votes">Share (pts)</button>
+      <button data-v="net" title="Net D−R votes per km²: an area's contribution to the popular vote">Net votes</button>
+    </div>
+  </div>
+  <div class="ctl ctl-view">
     <label>View</label>
-    <div class="seg" id="mode">
-      <button data-mode="margin">Margin</button>
-      <button data-mode="abs" class="active">Swing</button>
-      <button data-mode="dev">Deviation</button>
+    <div class="seg" id="view">
+      <button data-v="level" title="A single year (Focus year)">Level</button>
+      <button data-v="abs" class="active" title="Change from Baseline to Focus year">Swing</button>
+      <button data-v="dev" title="Swing relative to the national swing">Deviation</button>
+    </div>
+  </div>
+  <div class="ctl ctl-view">
+    <label>Swing scale <button type="button" id="scaleInfo" class="info" aria-expanded="false"
+      aria-controls="scaleNote" aria-label="What does room-adjusted mean?">?</button></label>
+    <div class="popnote" id="scaleNote" role="note"></div>
+    <div class="seg" id="scale">
+      <button data-v="pts" class="active" title="Plain change in margin, in points">Points</button>
+      <button data-v="logit" title="Log-odds: counties near ±100 have less room to move. Swing shown as the equivalent points at an even (50/50) county; deviation measured against a uniform national log-odds swing">Room-adjusted</button>
     </div>
   </div>
   <div class="ctl">
@@ -141,6 +167,6 @@
 <footer id="footer"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

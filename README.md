@@ -12,9 +12,11 @@ chart.
 > [Data & provenance](#data--provenance) and [Limitations](#limitations).
 
 **Interactive map:** `https://patrickmschneider.github.io/political-weather/`. Pick any
-**base** and **comparison** year (House 2014–2026, President 2008–2024), switch
-the view between **swing**, **deviation from national**, and a single-year
-**margin** (raw Dem–Rep lean), zoom/pan (finer detail revealed on zoom), hover
+**base** and **comparison** year (House 2014–2026, President 2008–2024), choose a
+**measure** — vote **share** (Dem–Rep margin in points: how an area votes) or
+**net votes** (net D−R votes per km²: how much it contributes to the popular
+vote, see below) — and a **view** — single-year **level**, **swing**, or
+**deviation from national** swing — zoom/pan (finer detail revealed on zoom), hover
 any county, and show state capitals / major cities. Rebuilt and redeployed on a
 schedule as results update.
 
@@ -60,6 +62,35 @@ per-county margins drive the tooltips. Pan/zoom and hover are built in.
 (The app uses "difference of smoothed margins" to allow arbitrary year pairs; the
 static maps use the equivalent "smoothed difference" of a single pair. The two
 agree closely.)
+
+**Net-vote view.** *Margin* is a vote-weighted **average** — how a neighbourhood
+would vote on its own — so a near-empty county and a dense metro with the same
+margin look identical. *Net votes* instead smooths each county's net Democratic
+votes (D − R), deposited at its tracts' population centres, with a normalised
+40 km Gaussian kernel (fixed at all zooms), giving **net votes per km²**
+(= margin × two-party vote density). The surface integrates to the national
+popular-vote margin, so it shows *where the popular vote comes from*.
+Net-vote **swing** is **turnout-neutral**: w̄·Δm, each county's margin swing
+applied to its mean two-party vote over the two years. It is the persuasion term
+of the exact decomposition Δ(w·m) = w̄·Δm + m̄·Δw, so turnout changes (e.g.
+presidential → midterm drop-off, which would otherwise make deep-blue cities
+show R-ward "swings") don't register. Net-vote **deviation** is
+w̄·(county swing − national swing), with the national swing also w̄-weighted, so
+it sums to exactly zero: votes gained or lost relative to a uniform swing. Density is
+heavy-tailed, so it is drawn on a signed-log scale (sign·log10(1 + |x|)). No
+small-county shrinkage is applied here; it isn't needed for a sum and would break
+the exact total.
+
+**Room-adjusted swing scale.** A county at D+80 cannot swing 15 points the way
+a 50/50 county can, so plain-points deviation makes every stronghold look like
+an underperformer. The *Room-adjusted* toggle works on the log-odds of the
+Democratic two-party share, 2·atanh(m/100). **Swing** is shown as the
+equivalent points at an even (50/50) county, 100·tanh(Δlog-odds/2).
+**Deviation** is actual swing minus the swing a *uniform national log-odds
+swing* δ predicts from the county's starting margin,
+100·tanh(atanh(m₀/100) + δ/2) − m₀, with δ chosen so weighted deviations sum to
+exactly zero (for net votes, w̄-weighted, so they still sum to zero in votes).
+Net-vote swing is actual votes and has no room-adjusted form.
 
 **Level of detail by zoom:** each baseline ships at two kernel bandwidths — a
 coarse 75 km surface shown when zoomed out and a finer 40 km surface that loads
